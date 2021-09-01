@@ -101,7 +101,20 @@ app.get('/:projectName/files', async (req, res) => {
         return f.replace(root, '');
     });
 
-    res.json(paths);
+    const promises = paths.map(async relPath => {
+        const fullPath = path.join(mediaFolderPath, relPath);
+        const stat = await fs.promises.stat(fullPath);
+
+        return {
+            path: relPath,
+            ctime: stat.ctime,
+            mtime: stat.mtime,
+            size: stat.size,
+        };
+    });
+    const resData = await Promise.all(promises);
+
+    res.json(resData);
 });
 
 app.get('/:projectName/db', async (req, res) => {
