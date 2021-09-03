@@ -1,18 +1,21 @@
 
-const path = require('path')
-const fs = require('fs')
-const express = require('express')
-// const yargs = require('yargs');
-const glob = require("glob")
-const cors = require("cors");
-const yaml = require("yaml");
+import * as path from 'path';
+import * as fs from 'fs';
+import * as express from 'express';
+// import * as yargs from 'yargs';
+import * as glob from 'glob';
+import * as cors from 'cors';
+import * as yaml from 'yaml';
+
+import { validateConfig } from './config-validation';
 
 const configStr = fs.readFileSync('./config.yaml', 'utf8')
-const config = yaml.parse(configStr);
+const configVal = yaml.parse(configStr);
+const config = validateConfig(configVal);
 
 const app = express();
 
-const getDirectories = async source => {
+const getDirectories = async (source: string) => {
     const results = await fs.promises.readdir(source, { withFileTypes: true });
 
     return results.filter(dirent => dirent.isDirectory())
@@ -20,9 +23,9 @@ const getDirectories = async source => {
     .sort((a, b) => a.localeCompare(b))
 };
 
-const convertPath = str => str.replace(/\\/g, '/');
+const convertPath = (str: string) => str.replace(/\\/g, '/');
 
-const searchGlob = globPath => {
+const searchGlob = (globPath: string): Promise<string[]> => {
     return new Promise((res, rej) => {
 
         glob(globPath, {strict: true}, (err, files) => {
@@ -40,7 +43,7 @@ const searchGlob = globPath => {
     });
 };
 // fixes issue when no files found on "Z:/"
-const searchGlobDisk = async (rootPath, fileGlob) => {
+const searchGlobDisk = async (rootPath: string, fileGlob: string) => {
     const dirs = await getDirectories(rootPath);
 
     const promises = dirs.map(dir => {
@@ -52,14 +55,18 @@ const searchGlobDisk = async (rootPath, fileGlob) => {
     return filesResults.flat();
 };
 
-const getMediaFolderPath = (projectName) => {
+const getMediaFolderPath = (projectName: string) => {
     return path.resolve(__dirname, config.projects[projectName].path);
+};
+const getThumbnailsFolderPath = (projectName: string) => {
+    return path.resolve(__dirname, config.projects[projectName].thumbnailsOutput);
 };
 
 app.use(cors());
 
 Object.keys(config.projects).forEach(projectName => {
     app.use(`/${projectName}/assets`, express.static(getMediaFolderPath(projectName)));
+    app.use(`/${projectName}/thumbnails`, express.static(getThumbnailsFolderPath(projectName)));
 });
 
 app.get('/', (req, res) => {

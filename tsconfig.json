@@ -1,0 +1,33 @@
+{
+    "compilerOptions": {
+        "allowUnreachableCode": false,
+        "forceConsistentCasingInFileNames": true,
+        "module": "CommonJS",
+        "moduleResolution": "node",
+        "noFallthroughCasesInSwitch": true,
+        "noImplicitAny": true,
+        "noImplicitReturns": true,
+        "noImplicitThis": true,
+        "noImplicitUseStrict": false,
+        // "noUnusedLocals": true,
+        // "noUnusedParameters": true,
+        "strictNullChecks": true,
+        "target": "ES2020",
+        "jsx": "react",
+        // "allowSyntheticDefaultImports": true,
+        "rootDir": "src",
+        "outDir": "build",
+        "experimentalDecorators": true,
+        "typeRoots": [
+            "./typings",
+            "node_modules/@types",
+            "./@types"
+        ],
+        "skipLibCheck": true,
+        "sourceMap": true,
+        "downlevelIteration": true,
+        "lib": [
+            "ES2020",
+        ]
+    }
+}
