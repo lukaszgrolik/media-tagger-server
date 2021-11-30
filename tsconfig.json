@@ -15,7 +15,7 @@
         "target": "ES2020",
         "jsx": "react",
         // "allowSyntheticDefaultImports": true,
-        "rootDir": "src",
+        // "rootDir": "src",
         "outDir": "build",
         "experimentalDecorators": true,
         "typeRoots": [

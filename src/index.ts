@@ -112,12 +112,47 @@ app.get('/:projectName/files', async (req, res) => {
         const fullPath = path.join(mediaFolderPath, relPath);
         const stat = await fs.promises.stat(fullPath);
 
-        return {
+        const res: {
+            path: string;
+            ctime: Date;
+            mtime: Date;
+            size: number;
+            width: number | undefined;
+            height: number | undefined;
+        } = {
             path: relPath,
             ctime: stat.ctime,
             mtime: stat.mtime,
             size: stat.size,
+            width: -1,
+            height: -1,
         };
+
+        const fileExtMatch = relPath.match(/[^\.]+$/)
+        if (!fileExtMatch) throw new Error(`file extension not detected: ${relPath}`);
+
+        const ext = fileExtMatch[0];
+        const metadataImageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+        const metadataImageExtsStrings = metadataImageExts.map(e => [e, e.toUpperCase()]).flat();
+
+        // if (metadataImageExtsStrings.includes(ext)) {
+        //     try {
+
+        //         const metadata = await sharp(fullPath).metadata();
+        //         res.width = metadata.width;
+        //         res.height = metadata.height;
+        //     }
+        //     catch (err) {
+        //         console.warn('err', ext, relPath);
+
+        //         // throw err;
+        //     }
+        // }
+        // else {
+        //     // console.log('aaa', ext);
+        // }
+
+        return res;
     });
     const resData = await Promise.all(promises);
 
