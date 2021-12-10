@@ -77,8 +77,78 @@ interface CommonFields {
     updatedAt: string;
 }
 
+abstract class JsonDbAdapter {
+    abstract read(): string | Promise<string>;
+    abstract write(text: string): void | Promise<void>;
+}
+
+export namespace Adapters {
+    export class Memory extends JsonDbAdapter {
+        constructor(readonly opts?: {db?: string}) {
+            super();
+
+            if (opts?.db) this.db = opts.db;
+        }
+
+        db = '';
+
+        read() {
+            return this.db;
+        }
+
+        write(text: string) {
+            this.db = text;
+        }
+    }
+
+    export class File extends JsonDbAdapter {
+        constructor(readonly opts: {filePath: string}) {
+            super();
+        }
+
+        read() {
+            return fs.promises.readFile(this.opts.filePath, { encoding: 'utf-8' });
+        }
+
+        write(text: string) {
+            return fs.promises.writeFile(this.opts.filePath, text);
+        }
+    }
+
+    interface LSLike {
+        getItem(key: string): string | null;
+        setItem(key: string, value: string): void;
+        // removeItem(key: string): void;
+        // clear(): void;
+    }
+
+    // declare var localStorage: LSLike;
+
+    export class LocalStorage extends JsonDbAdapter {
+        private localStorage: LSLike;
+
+        constructor(readonly opts: {name: string, localStorage?: LSLike}) {
+            super();
+
+            if (this.opts.localStorage !== undefined) this.localStorage = this.opts.localStorage;
+        }
+
+        read() {
+            const val = this.localStorage.getItem(this.opts.name);
+            if (val === null) throw new Error(`localStorage db does not exist under the key: ${this.opts.name}`);
+
+            return val;
+        }
+
+        write(text: string) {
+            return this.localStorage.setItem(this.opts.name, text);
+        }
+    }
+}
+
 interface Opts {
-    readonly filePath: string;
+    // readonly filePath: string;
+    readonly adapter: JsonDbAdapter;
     readonly backupFile?: boolean;
     // readonly findById: (coll: keyof Res, rec: Res[keyof Res], id: RecordId) => boolean;
     // collections: (keyof FileContent<Response>['collections'])[]
@@ -111,8 +181,18 @@ export class JsonDB<
     //     return record;
     // }
 
+    private readDbRaw() {
+        // return fs.readFileSync(this.opts.filePath, { encoding: 'utf-8' });
+        return this.opts.adapter.read();
+    }
+
+    private writeDbRaw(str: string) {
+        // fs.writeFileSync(this.opts.filePath, str);
+        return this.opts.adapter.write(str);
+    }
+
     // async loadData(): Promise<FileContent<Response>> {
-    private loadData(): FileContent<T> {
+    private async loadData(): Promise<FileContent<T>> {
         // await this.currentIO
 
         // const promise = this.currentIO = new Promise<FileContent<Response>>((res, rej) => {
@@ -125,13 +205,13 @@ export class JsonDB<
         // })
 
         // return promise
-        const text = fs.readFileSync(this.opts.filePath, { encoding: 'utf-8' });
+        const text = await this.readDbRaw();
 
         return JSON.parse(text);
     }
 
     // async saveData(data: FileContent<Response>): Promise<void> {
-    private saveData(data: FileContent<T>): void {
+    private saveData(data: FileContent<T>) {
         // // fs.writeFileSync(this.opts.filePath, JSON.stringify(data, null, 2))
 
         // await this.currentIO
@@ -157,10 +237,10 @@ export class JsonDB<
         }
 
         // writeFileAtomicSync(this.opts.filePath, JSON.stringify(data, null, 2));
-        fs.writeFileSync(this.opts.filePath, JSON.stringify(data, null, 2));
+        return this.writeDbRaw(JSON.stringify(data, null, 2));
     }
 
-    private validateBody<C extends keyof T>(body: Partial<Omit<T[C], keyof CommonFields>>) {
+    private preValidateBody<C extends keyof T>(body: Partial<Omit<T[C], keyof CommonFields>>) {
         Object.entries(body).forEach(([key, val]) => {
             if (val === undefined) throw new Error(`invalid undefined value for key "${key}"`);
         });
@@ -186,8 +266,24 @@ export class JsonDB<
     //     });
     // }
 
-    read(): CollectionsObj<T> {
-        const fileContent = this.loadData();
+    readonly validate = {
+        onInsert: (cb: <C extends keyof T>(collName: C, body: Omit<T[C], keyof CommonFields>) => void) => {
+            this.validate_onInsert = cb;
+        },
+        onUpdate: (cb: <C extends keyof T>(collName: C, id: RecordId, body: Partial<Omit<T[C], keyof CommonFields>>) => void) => {
+            this.validate_onUpdate = cb;
+        },
+        onDelete: (cb: <C extends keyof T>(collName: C, id: RecordId) => void) => {
+            this.validate_onDelete = cb;
+        },
+    };
+
+    private validate_onInsert?: <C extends keyof T>(collName: C, body: Omit<T[C], keyof CommonFields>) => void;
+    private validate_onUpdate?: <C extends keyof T>(collName: C, id: RecordId, body: Partial<Omit<T[C], keyof CommonFields>>) => void;
+    private validate_onDelete?: <C extends keyof T>(collName: C, id: RecordId) => void;
+
+    async read(): Promise<CollectionsObj<T>> {
+        const fileContent = await this.loadData();
 
         return fileContent.collections;
     }
@@ -209,11 +305,11 @@ export class JsonDB<
     //     return record
     // }
 
-    insert<C extends keyof T>(collName: C, body: Omit<T[C], keyof CommonFields>): T[C] {
-        this.validateBody(body);
+    async insert<C extends keyof T>(collName: C, body: Omit<T[C], keyof CommonFields>): Promise<T[C]> {
+        this.preValidateBody(body);
+        if (this.validate_onInsert) this.validate_onInsert(collName, body);
 
-        // const fileContent = await this.loadData()
-        const fileContent = this.loadData();
+        const fileContent = await this.loadData();
         const date = this.getDateString();
         // object spread throws TS error - https://github.com/Microsoft/TypeScript/issues/14409
         // const record = {
@@ -235,7 +331,7 @@ export class JsonDB<
         fileContent.collections[collName].push(record);
 
         // await this.saveData(fileContent)
-        this.saveData(fileContent);
+        await this.saveData(fileContent);
 
         return record;
     }
@@ -267,14 +363,14 @@ export class JsonDB<
     //     return x;
     // }
 
-    update<C extends keyof T>(collName: C, id: RecordId, body: Partial<Omit<T[C], keyof CommonFields>>): T[C] {
-        this.validateBody(body);
+    async update<C extends keyof T>(collName: C, id: RecordId, body: Partial<Omit<T[C], keyof CommonFields>>): Promise<T[C]> {
+        this.preValidateBody(body);
+        if (this.validate_onUpdate) this.validate_onUpdate(collName, id, body);
 
         // await this.testIO
 
         // const update = async () => {
-        // const fileContent = await this.loadData()
-        const fileContent = this.loadData();
+        const fileContent = await this.loadData();
         // const record = this.getRecordById(fileContent.collections, coll, id);
         const record = fileContent.collections[collName].find(rec => rec.id === id);
         if (!record) throw new Error();
@@ -284,7 +380,7 @@ export class JsonDB<
         Object.assign(record, { updatedAt }, body);
 
         // await this.saveData(fileContent)
-        this.saveData(fileContent);
+        await this.saveData(fileContent);
 
         // await new Promise((res) => {
         //   setTimeout(() => {
@@ -303,25 +399,25 @@ export class JsonDB<
         // return this.testIO
     }
 
-    delete<C extends keyof T>(collName: C, id: RecordId): T[C] {
-        // const fileContent = await this.loadData()
-        const fileContent = this.loadData();
+    async delete<C extends keyof T>(collName: C, id: RecordId): Promise<T[C]> {
+        if (this.validate_onDelete) this.validate_onDelete(collName, id);
+
+        const fileContent = await this.loadData();
         const record = fileContent.collections[collName].find(rec => rec.id === id);
         if (!record) throw new Error();
 
         const index = fileContent.collections[collName].indexOf(record);
         fileContent.collections[collName].splice(index, 1);
 
-        // await this.saveData(fileContent)
-        this.saveData(fileContent);
+        await this.saveData(fileContent);
 
         return record;
     }
 
     // @todo fix typescript body check
     // batch<C extends keyof T>(ops: BatchOp<T, C>[]) {
-    batch(ops: BatchOp<T>[]) {
-        const dataBefore = this.loadData();
+    async batch(ops: BatchOp<T>[]) {
+        const dataBefore = await this.loadData();
         const res = [];
 
         try {
@@ -329,13 +425,13 @@ export class JsonDB<
                 let data;
 
                 if (op.type === 'insert') {
-                    data = this.insert(op.collection, op.body);
+                    data = await this.insert(op.collection, op.body);
                 }
                 else if (op.type === 'update') {
-                    data = this.update(op.collection, op.id, op.body);
+                    data = await this.update(op.collection, op.id, op.body);
                 }
                 else if (op.type === 'delete') {
-                    data = this.delete(op.collection, op.id);
+                    data = await this.delete(op.collection, op.id);
                 }
                 else {
                     throw new Error(`invalid operation type: ${(op as any).type}`);
@@ -343,10 +439,9 @@ export class JsonDB<
 
                 res.push(data);
             }
-
         }
         catch (err) {
-            this.saveData(dataBefore);
+            await this.saveData(dataBefore);
 
             throw err;
         }
@@ -354,14 +449,32 @@ export class JsonDB<
         return res;
     }
 
-    clear(): void {
-        const fileContent = this.loadData();
+    async transaction(cb: (tx: JsonDB<T>) => void | Promise<void>) {
+        const dbText = await this.readDbRaw();
+
+        const memAdapter = new Adapters.Memory({ db: dbText });
+        const tempDb = new JsonDB<T>({
+            ...this.opts,
+            adapter: memAdapter,
+        });
+
+        await cb(tempDb);
+
+        await this.writeDbRaw(memAdapter.db);
+    }
+
+    async clear() {
+        const fileContent = await this.loadData();
 
         for (const collName in fileContent.collections) {
             fileContent.counters[collName] = 0;
             fileContent.collections[collName] = [];
         }
 
-        this.saveData(fileContent);
+        await this.saveData(fileContent);
     }
 }
+
+// interface CUDHandle {
+//     create
+// }

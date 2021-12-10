@@ -3,7 +3,20 @@ import * as fs from 'fs';
 import 'mocha';
 import * as should from 'should';
 
-import { JsonDB, getEmptyFileContents, RecordId } from '../src/json-db/json-db';
+import { JsonDB, getEmptyFileContents, RecordId, Adapters } from '../src/json-db/json-db';
+
+async function promiseShouldThrow(cb: () => void | Promise<void>) {
+    try {
+        await cb();
+
+        should.throws(() => {
+            // empty here
+        });
+    }
+    catch (err) {
+        // empty here to ignore the error
+    }
+}
 
 interface DbRes {
     users: {
@@ -17,6 +30,7 @@ interface DbRes {
         createdAt: string;
         updatedAt: string;
         name: string;
+        tagsIds: RecordId[];
     };
     tags: {
         id: RecordId;
@@ -47,7 +61,9 @@ function createDbFile() {
     fs.writeFileSync(DB_FILE_PATH, JSON.stringify(data));
 
     return new JsonDB<DbRes>({
-        filePath: DB_FILE_PATH,
+        adapter: new Adapters.File({
+            filePath: DB_FILE_PATH,
+        }),
         // findById: (coll, rec, id) => {
         //     // rec.
         // },
@@ -56,15 +72,15 @@ function createDbFile() {
 
 const jsonDB = createDbFile();
 
-describe('', () => {
-    beforeEach(() => {
-        jsonDB.clear();
+describe('JsonDB', () => {
+    beforeEach(async () => {
+        await jsonDB.clear();
     });
 
-    after(() => {
+    after(async () => {
         // remove file
 
-        fs.unlinkSync(DB_FILE_PATH);
+        await fs.promises.unlink(DB_FILE_PATH);
     });
 
     describe('getEmptyFileContents', () => {
@@ -93,21 +109,61 @@ describe('', () => {
         // });
 
         it('throws when any record has invalid schema');
+
+        it('test', () => {
+            // jsonDB.validate.onInsert((collName, body) => {
+            //     if (collName === 'projects') {
+            //         body.name.length > 30;
+            //     }
+            // });
+
+            // jsonDB.validate.onUpdate('tags', (id, body) => {
+            //     // body.
+            // });
+
+            // jsonDB.validate.onDelete('tags', id => {
+            //
+            // });
+
+            // jsonDB.hooks.beforeUpdate(body => {
+            //     // removes records that reference deleted record
+            // });
+
+            // after record found, before actual deletion
+            // jsonDB.hooks.beforeDelete(collName, id => {
+            //     // removes records that reference deleted record
+
+            //     if (collName === 'tags') {
+            //         const { projects, tags } = jsonDB.read()
+            //         const tagChildren = tags.filter(t => t.parentId === id);
+
+            //         if (tagChildren.length > 0) {
+            //             throw new Error();
+            //         }
+
+            //         const tagProjects = projects.filter(p => p.tagsIds.includes(id));
+
+            //         if (tagProjects.length > 0) {
+            //             throw new Error();
+            //         }
+            //     }
+            // });
+        });
     });
 
-    it('loads content', () => {
-        const dataBefore = jsonDB.read();
+    it('loads content', async () => {
+        const dataBefore = await jsonDB.read();
 
         should.deepEqual(Object.keys(dataBefore), ['users', 'projects', 'tags']);
         should.equal(dataBefore.users.length, 0);
         should.equal(dataBefore.projects.length, 0);
         should.equal(dataBefore.tags.length, 0);
 
-        jsonDB.insert('users', {email: 'aaa@bbb.com'});
-        jsonDB.insert('projects', {name: 'p1'});
-        jsonDB.insert('tags', {name: '', parentId: null});
+        await jsonDB.insert('users', {email: 'aaa@bbb.com'});
+        await jsonDB.insert('projects', {name: 'p1', tagsIds: []});
+        await jsonDB.insert('tags', {name: '', parentId: null});
 
-        const dataAfter = jsonDB.read();
+        const dataAfter = await jsonDB.read();
 
         should.deepEqual(Object.keys(dataBefore), ['users', 'projects', 'tags']);
         should.equal(dataAfter.users.length, 1);
@@ -115,33 +171,37 @@ describe('', () => {
         should.equal(dataAfter.tags.length, 1);
     });
 
+    describe('modification', () => {
+        it('read, insert, update, delete actions wait for other modify actions to finish');
+    });
+
     describe('creating record', () => {
         // it('throws when payload contains id field', () => {
-        //     should.throws(() => {
-        //         jsonDB.insert('projects', { id: 123, name: 'test 1' });
+        //     await promiseShouldThrow(() => {
+        //         await jsonDB.insert('projects', { id: 123, name: 'test 1' });
         //     });
         // });
 
         // it('throws when payload contains timestamp fields', () => {
-        //     should.throws(() => {
-        //         jsonDB.insert('projects', { createdAt: '', name: 'test 1' });
-        //         jsonDB.insert('projects', { updatedAt: '', name: 'test 1' });
+        //     await promiseShouldThrow(() => {
+        //         await jsonDB.insert('projects', { createdAt: '', name: 'test 1' });
+        //         await jsonDB.insert('projects', { updatedAt: '', name: 'test 1' });
         //     });
         // });
 
-        it('throws when references id of non-existent record', () => {
-            should.throws(() => {
-                jsonDB.insert('tags', {name: 't1', parentId: 123});
+        it('throws when references id of non-existent record', async () => {
+            await promiseShouldThrow(async () => {
+                await jsonDB.insert('tags', {name: 't1', parentId: 123});
             });
         });
 
-        it('adds new record to db', () => {
-            const data1 = jsonDB.read();
+        it('adds new record to db', async () => {
+            const data1 = await jsonDB.read();
             should.equal(data1.projects.length, 0);
 
-            jsonDB.insert('projects', { name: 'test 1' });
+            await jsonDB.insert('projects', { name: 'test 1', tagsIds: [] });
 
-            const data2 = jsonDB.read();
+            const data2 = await jsonDB.read();
             should.equal(data2.projects.length, 1);
 
             const project = data2.projects[0];
@@ -151,28 +211,28 @@ describe('', () => {
             should.equal(project.name, 'test 1');
         });
 
-        it('adds timestamps', () => {
-            jsonDB.insert('projects', { name: 'test 1' });
+        it('adds timestamps', async () => {
+            await jsonDB.insert('projects', { name: 'test 1', tagsIds: [] });
 
-            const data = jsonDB.read();
+            const data = await jsonDB.read();
             const p1 = data.projects[0];
 
             should.equal(typeof p1.createdAt, 'string');
             should.equal(typeof p1.updatedAt, 'string');
         });
 
-        it('returns newly created record', () => {
-            const project = jsonDB.insert('projects', { name: 'test 1' });
+        it('returns newly created record', async () => {
+            const project = await jsonDB.insert('projects', { name: 'test 1', tagsIds: [] });
 
-            should.deepEqual(Object.keys(project), ['id', 'createdAt', 'updatedAt', 'name']);
+            should.deepEqual(Object.keys(project), ['id', 'createdAt', 'updatedAt', 'name', 'tagsIds']);
             should.equal(project.id, 1);
             should.equal(project.name, 'test 1');
         });
 
-        it('increases ID counter', () => {
-            const p1 = jsonDB.insert('projects', { name: 'test 1' });
-            const p2 = jsonDB.insert('projects', { name: 'test 2' });
-            const t1 = jsonDB.insert('tags', { name: 'tag 1', parentId: null });
+        it('increases ID counter', async () => {
+            const p1 = await jsonDB.insert('projects', { name: 'test 1', tagsIds: [] });
+            const p2 = await jsonDB.insert('projects', { name: 'test 2', tagsIds: [] });
+            const t1 = await jsonDB.insert('tags', { name: 'tag 1', parentId: null });
 
             should.equal(p1.id, 1);
             should.equal(p2.id, 2);
@@ -180,29 +240,29 @@ describe('', () => {
         });
 
         // it('ignores undefineds in body', () => {
-        //     jsonDB.insert('tags', { name: 'test 1 });
+        //     await jsonDB.insert('tags', { name: 'test 1 });
         // });
 
-        it('ignores undefineds in body', () => {
-            should.throws(() => {
-                // use "any" to force undefined
-                jsonDB.insert('projects', { name: undefined as any });
-            });
-        });
+        // it('ignores undefineds in body', () => {
+        //     await promiseShouldThrow(() => {
+        //         // use "any" to force undefined
+        //         await jsonDB.insert('projects', { name: undefined as any, tagsIds: [] });
+        //     });
+        // });
     });
 
     describe('updating record', () => {
-        it('throws when id not found', () => {
-            should.throws(() => {
-                jsonDB.update('projects', 1, {});
+        it('throws when id not found', async () => {
+            await promiseShouldThrow(async () => {
+                await jsonDB.update('projects', 1, {});
             });
         });
 
-        it('throws when references id of non-existent record', () => {
-            should.throws(() => {
+        it('throws when references id of non-existent record', async () => {
+            await promiseShouldThrow(async () => {
                 // jsonDB.update('projects', 1, {});
-                jsonDB.insert('tags', { name: 't1', parentId: null });
-                jsonDB.update('tags', 1, {parentId: 123});
+                await jsonDB.insert('tags', { name: 't1', parentId: null });
+                await jsonDB.update('tags', 1, {parentId: 123});
             });
         });
 
@@ -214,97 +274,97 @@ describe('', () => {
 
         // });
 
-        it('updates record in db', () => {
-            jsonDB.insert('projects', {name: 'p1'});
-            jsonDB.update('projects', 1, {name: 'p1 updated'});
+        it('updates record in db', async () => {
+            await jsonDB.insert('projects', {name: 'p1', tagsIds: []});
+            await jsonDB.update('projects', 1, {name: 'p1 updated'});
 
-            const data = jsonDB.read();
+            const data = await jsonDB.read();
 
             should.equal(data.projects.length, 1);
             should.equal(data.projects[0].name, 'p1 updated');
         });
 
-        it('returns updated record', () => {
-            jsonDB.insert('projects', {name: 'p1'});
-            const p1 = jsonDB.update('projects', 1, {name: 'p1 updated'});
+        it('returns updated record', async () => {
+            await jsonDB.insert('projects', {name: 'p1', tagsIds: []});
+            const p1 = await jsonDB.update('projects', 1, {name: 'p1 updated'});
 
-            should.deepEqual(Object.keys(p1), ['id', 'createdAt', 'updatedAt', 'name']);
+            should.deepEqual(Object.keys(p1), ['id', 'createdAt', 'updatedAt', 'name', 'tagsIds']);
             should.equal(p1.id, 1);
             should.equal(typeof p1.createdAt, 'string');
             should.equal(typeof p1.updatedAt, 'string');
             should.equal(p1.name, 'p1 updated');
         });
 
-        it('does not change fields not present in body', () => {
-            jsonDB.insert('tags', { name: 'tag 1', parentId: null });
-            jsonDB.insert('tags', { name: 'tag 2', parentId: 1 });
+        it('does not change fields not present in body', async () => {
+            await jsonDB.insert('tags', { name: 'tag 1', parentId: null });
+            await jsonDB.insert('tags', { name: 'tag 2', parentId: 1 });
 
-            const tagRes1 = jsonDB.update('tags', 2, {name: 'tag 2 updated'});
+            const tagRes1 = await jsonDB.update('tags', 2, {name: 'tag 2 updated'});
 
             should.equal(tagRes1.name, 'tag 2 updated');
             should.equal(tagRes1.parentId, 1);
 
-            const tagRes2 = jsonDB.update('tags', 2, {parentId: null});
+            const tagRes2 = await jsonDB.update('tags', 2, {parentId: null});
 
             should.equal(tagRes2.name, 'tag 2 updated');
             should.equal(tagRes2.parentId, null);
 
         });
 
-        it('updates timestamp', () => {
-            const res1 = jsonDB.insert('tags', { name: 'tag', parentId: null });
+        it('updates timestamp', async () => {
+            const res1 = await jsonDB.insert('tags', { name: 'tag', parentId: null });
 
             return new Promise((res) => {
-                setTimeout(() => {
-                    const res2 = jsonDB.update('tags', 1, { name: 'tag updated' });
+                setTimeout(async () => {
+                    const res2 = await jsonDB.update('tags', 1, { name: 'tag updated' });
 
                     should.equal(res1.createdAt === res2.createdAt, true);
                     should.equal(res1.updatedAt === res2.updatedAt, false);
 
-                    res(null);
+                    res();
                 }, 10);
             });
         });
 
-        it('ignores undefineds in body', () => {
-            jsonDB.insert('projects', {name: 'p1'});
+        it('ignores undefineds in body', async () => {
+            await jsonDB.insert('projects', { name: 'p1', tagsIds: [] });
 
-            should.throws(() => {
-                jsonDB.update('projects', 1, {name: undefined});
+            await promiseShouldThrow(async () => {
+                await jsonDB.update('projects', 1, {name: undefined});
             });
         });
     });
 
-    describe('deleting record', () => {
-        it('throws when id not found', () => {
-            should.throws(() => {
-                jsonDB.delete('projects', 1);
+    describe('deleting record', async () => {
+        it('throws when id not found', async () => {
+            await promiseShouldThrow(async () => {
+                await jsonDB.delete('projects', 1);
             });
         });
 
-        it('throws when deleting record that is referenced elsewhere', () => {
-            should.throws(() => {
-                // jsonDB.update('projects', 1, {});
-                jsonDB.insert('tags', { name: 't1', parentId: null });
-                jsonDB.insert('tags', { name: 't2', parentId: 1 });
-                jsonDB.delete('tags', 1);
-            });
-        });
+        // it('throws when deleting record that is referenced elsewhere', () => {
+        //     await promiseShouldThrow(() => {
+        //         // jsonDB.update('projects', 1, {});
+        //         await jsonDB.insert('tags', { name: 't1', parentId: null });
+        //         await jsonDB.insert('tags', { name: 't2', parentId: 1 });
+        //         await jsonDB.delete('tags', 1);
+        //     });
+        // });
 
-        it('removes record from db', () => {
-            jsonDB.insert('projects', { name: 'p1' });
-            jsonDB.delete('projects', 1);
+        it('removes record from db', async () => {
+            await jsonDB.insert('projects', { name: 'p1', tagsIds: [] });
+            await jsonDB.delete('projects', 1);
 
-            const data = jsonDB.read();
+            const data = await jsonDB.read();
 
             should.equal(data.projects.length, 0);
         });
 
-        it('returns deleted record', () => {
-            jsonDB.insert('projects', { name: 'p1' });
-            const project = jsonDB.delete('projects', 1);
+        it('returns deleted record', async () => {
+            await jsonDB.insert('projects', { name: 'p1', tagsIds: [] });
+            const project = await jsonDB.delete('projects', 1);
 
-            should.deepEqual(Object.keys(project), ['id', 'createdAt', 'updatedAt', 'name']);
+            should.deepEqual(Object.keys(project), ['id', 'createdAt', 'updatedAt', 'name', 'tagsIds']);
             should.equal(project.id, 1);
             should.equal(typeof project.createdAt, 'string');
             should.equal(typeof project.updatedAt, 'string');
@@ -313,14 +373,14 @@ describe('', () => {
     });
 
     describe('clearing data', () => {
-        it('clears data', () => {
-            jsonDB.insert('users', { email: 'u1' });
-            jsonDB.insert('projects', { name: 'p1' });
-            jsonDB.insert('tags', { name: 't1', parentId: null });
+        it('deletes all records from all collections', async () => {
+            await jsonDB.insert('users', { email: 'u1' });
+            await jsonDB.insert('projects', { name: 'p1', tagsIds: [] });
+            await jsonDB.insert('tags', { name: 't1', parentId: null });
 
-            jsonDB.clear();
+            await jsonDB.clear();
 
-            const data = jsonDB.read();
+            const data = await jsonDB.read();
 
             should.equal(data.users.length, 0);
             should.equal(data.projects.length, 0);
@@ -329,12 +389,12 @@ describe('', () => {
     });
 
     describe('batch', () => {
-        it('executes in sequence', () => {
-            jsonDB.insert('projects', {name: 'p1'});
-            jsonDB.insert('projects', {name: 'p2'});
-            jsonDB.insert('projects', {name: 'p3'});
+        it('executes in sequence', async () => {
+            await jsonDB.insert('projects', {name: 'p1', tagsIds: []});
+            await jsonDB.insert('projects', {name: 'p2', tagsIds: []});
+            await jsonDB.insert('projects', {name: 'p3', tagsIds: []});
 
-            const batchRes = jsonDB.batch([
+            const batchRes = await jsonDB.batch([
                 {
                     type: 'insert',
                     collection: 'projects',
@@ -366,7 +426,7 @@ describe('', () => {
 
             should.equal(batchRes.length, 5);
 
-            const data = jsonDB.read();
+            const data = await jsonDB.read();
 
             should.equal(data.projects.length, 3);
             should.equal(data.projects[0].name, 'p1 updated');
@@ -380,13 +440,129 @@ describe('', () => {
         it('reverts all operations if an error occurred in any of them');
     });
 
-    describe('id counter', () => {
-        it('preserves id counter value after deleting a record', () => {
-            jsonDB.insert('projects', { name: 'p1' });
-            jsonDB.delete('projects', 1);
-            const project = jsonDB.insert('projects', { name: 'p2' });
+    describe('transactions', () => {
+        describe('commit', () => {
+            it('saves all insert, update and delete actions', async () => {
+                await jsonDB.transaction(async tx => {
+                    await tx.insert('projects', {name: 'p1', tagsIds: []});
+                    await tx.insert('projects', {name: 'p2', tagsIds: []});
 
-            const data = jsonDB.read();
+                    await tx.update('projects', 2, {
+                        name: 'p2 updated'
+                    });
+
+                    await tx.delete('projects', 1);
+                });
+
+                const data = await jsonDB.read();
+
+                should.equal(data.projects.length, 1);
+                should.equal(data.projects[0].id, 2);
+                should.equal(data.projects[0].name, 'p2 updated');
+            });
+
+            it('changes db within transaction context', async () => {
+                await jsonDB.insert('projects', { name: 'p0', tagsIds: [] });
+
+                await jsonDB.transaction(async tx => {
+                    await tx.insert('projects', {name: 'p1', tagsIds: []});
+                    await tx.insert('projects', {name: 'p2', tagsIds: []});
+
+                    await tx.update('projects', 3, {
+                        name: 'p2 updated'
+                    });
+
+                    await tx.delete('projects', 1);
+
+                    const data = await tx.read();
+
+                    should.equal(data.projects.length, 2);
+                    should.equal(data.projects[1].id, 3);
+                    should.equal(data.projects[1].name, 'p2 updated');
+                });
+            });
+
+            it('does not change db outside transaction context', async () => {
+                await jsonDB.insert('projects', { name: 'p0', tagsIds: [] });
+
+                await jsonDB.transaction(async tx => {
+                    await tx.insert('projects', {name: 'p1', tagsIds: []});
+                    await tx.insert('projects', {name: 'p2', tagsIds: []});
+
+                    await tx.update('projects', 3, {
+                        name: 'p2 updated'
+                    });
+
+                    await tx.delete('projects', 1);
+
+                    const data = await jsonDB.read();
+
+                    should.equal(data.projects.length, 1);
+                    should.equal(data.projects[0].id, 1);
+                    should.equal(data.projects[0].name, 'p0');
+                });
+            });
+
+            it('read, insert, update, delete actions wait for the current transaction to finish');
+
+            it('transactions wait for the current transaction to finish');
+
+            it('throws an error from the transaction if any', async () => {
+                await jsonDB.insert('projects', { name: 'p0', tagsIds: [] });
+
+                await promiseShouldThrow(async () => {
+                    await jsonDB.transaction(async tx => {
+                        await tx.insert('projects', { name: 'p1', tagsIds: [] });
+                        await tx.insert('projects', { name: 'p2', tagsIds: [] });
+
+                        await tx.update('projects', 3, {
+                            name: 'p2 updated'
+                        });
+
+                        await tx.delete('projects', 4);
+                    });
+                });
+            });
+
+            it('reverts pre-transaction state in case of an error', async () => {
+                await jsonDB.insert('projects', { name: 'p0', tagsIds: [] });
+
+                try {
+                    await jsonDB.transaction(async tx => {
+                        await tx.insert('projects', {name: 'p1', tagsIds: []});
+                        await tx.insert('projects', {name: 'p2', tagsIds: []});
+
+                        await tx.update('projects', 3, {
+                            name: 'p2 updated'
+                        });
+
+                        await tx.delete('projects', 4);
+                    });
+                }
+                catch(err) {
+
+                }
+
+                const data = await jsonDB.read();
+
+                should.equal(data.projects.length, 1);
+                should.equal(data.projects[0].id, 1);
+                should.equal(data.projects[0].name, 'p0');
+            });
+        });
+
+        describe('rollback', () => {
+
+        });
+    });
+
+    describe('id counter', () => {
+        it('preserves id counter value after deleting a record', async () => {
+            await jsonDB.insert('projects', { name: 'p1', tagsIds: [] });
+            await jsonDB.delete('projects', 1);
+            const project = await jsonDB.insert('projects', { name: 'p2', tagsIds: [] });
+
+            const data = await jsonDB.read();
             const dataProject = data.projects.find(p => p.id === 2);
 
             should.equal(project.id, 2);
@@ -401,6 +577,35 @@ describe('', () => {
 
     describe('db backup', () => {
         it('creates a backup on save');
+    });
+
+    describe('adapters', () => {
+        describe('file', () => {
+            const jsonDb = new JsonDB({
+                adapter: new Adapters.File({
+                    filePath: './db.test.json'
+                }),
+            });
+        });
+
+        describe('localStorage', () => {
+            const lsMockData: {[key: string]: string} = {};
+            const lsMock = {
+                getItem(key: string) {
+                    return lsMockData[key] || null;
+                },
+                setItem(key: string, val: string) {
+                    lsMockData[key] = val;
+                },
+            }
+
+            const jsonDb = new JsonDB({
+                adapter: new Adapters.LocalStorage({
+                    name: 'db.test',
+                    localStorage: lsMock,
+                }),
+            });
+        });
     });
 });
 
