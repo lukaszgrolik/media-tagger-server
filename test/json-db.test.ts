@@ -1,20 +1,28 @@
 import * as path from 'path';
 import * as fs from 'fs';
+import { EventEmitter } from 'events';
 import 'mocha';
 import * as should from 'should';
 
 import { JsonDB, getEmptyFileContents, RecordId, Adapters } from '../src/json-db/json-db';
 
-async function promiseShouldThrow(cb: () => void | Promise<void>) {
+async function promiseShouldThrow(cb: () => void | Promise<void>, msg?: string) {
     try {
         await cb();
 
         should.throws(() => {
             // empty here
-        });
+        }, msg);
     }
-    catch (err) {
-        // empty here to ignore the error
+    catch (err: unknown) {
+        if (msg) {
+            if (err instanceof Error) {
+                should.equal(err.message, msg);
+            }
+            else {
+                throw new Error(`Error message required: ${msg}`);
+            }
+        }
     }
 }
 
@@ -41,6 +49,12 @@ interface DbRes {
     };
 }
 
+function getEmptyDbContentRaw() {
+    const data = getEmptyFileContents(['users', 'projects', 'tags']);
+
+    return JSON.stringify(data);
+}
+
 // interface DbBody {
 //     users: {
 //         email: string;
@@ -57,8 +71,8 @@ interface DbRes {
 const DB_FILE_PATH = path.resolve(process.cwd(), 'json-db-test.json');
 
 function createDbFile() {
-    const data = getEmptyFileContents(['users', 'projects', 'tags']);
-    fs.writeFileSync(DB_FILE_PATH, JSON.stringify(data));
+    const dataStr = getEmptyDbContentRaw();
+    fs.writeFileSync(DB_FILE_PATH, dataStr);
 
     return new JsonDB<DbRes>({
         adapter: new Adapters.File({
@@ -110,7 +124,7 @@ describe('JsonDB', () => {
 
         it('throws when any record has invalid schema');
 
-        it('test', () => {
+        it('invokes beforeDelete hook', async () => {
             // jsonDB.validate.onInsert((collName, body) => {
             //     if (collName === 'projects') {
             //         body.name.length > 30;
@@ -130,24 +144,50 @@ describe('JsonDB', () => {
             // });
 
             // after record found, before actual deletion
-            // jsonDB.hooks.beforeDelete(collName, id => {
-            //     // removes records that reference deleted record
+            const memAdapter = new Adapters.Memory({
+                db: getEmptyDbContentRaw(),
+            });
+            const jsonDB = new JsonDB<DbRes>({
+                adapter: memAdapter,
+                hooks: {
+                    tags: {
+                        beforeDelete: async id => {
+                            // removes records that reference deleted record
 
-            //     if (collName === 'tags') {
-            //         const { projects, tags } = jsonDB.read()
-            //         const tagChildren = tags.filter(t => t.parentId === id);
+                            const { projects, tags } = await jsonDB.read()
+                            const tagChildren = tags.filter(t => t.parentId === id);
 
-            //         if (tagChildren.length > 0) {
-            //             throw new Error();
-            //         }
+                            if (tagChildren.length > 0) {
+                                const err = new Error('cannot delete tag that has children');
+                                // err.tagsIds = tagChildren.map(t => t.id);
+                                throw err;
+                            }
 
-            //         const tagProjects = projects.filter(p => p.tagsIds.includes(id));
+                            const tagProjects = projects.filter(p => p.tagsIds.includes(id));
 
-            //         if (tagProjects.length > 0) {
-            //             throw new Error();
-            //         }
-            //     }
-            // });
+                            if (tagProjects.length > 0) {
+                                const err = new Error('cannot delete tag that is assigned to a project');
+                                // err.projectsIds = tagProjects.map(p => p.id);
+                                throw err;
+                            }
+                        }
+                    }
+                },
+            });
+
+            const res_t1 = await jsonDB.insert('tags', {name: 't1', parentId: null});
+            const res_t2 = await jsonDB.insert('tags', { name: 't1.1', parentId: res_t1.id });
+
+            await promiseShouldThrow(async () => {
+                await jsonDB.delete('tags', 1);
+            }, 'cannot delete tag that has children');
+
+            await jsonDB.delete('tags', res_t2.id);
+            await jsonDB.insert('projects', {name: 'p1', tagsIds: [res_t1.id]});
+
+            await promiseShouldThrow(async () => {
+                await jsonDB.delete('tags', 1);
+            }, 'cannot delete tag that is assigned to a project');
         });
     });
 
@@ -172,7 +212,41 @@ describe('JsonDB', () => {
     });
 
     describe('modification', () => {
-        it('read, insert, update, delete actions wait for other modify actions to finish');
+        it('insert actions wait for other modify actions to finish', async () => {
+            const memAdapter = new Adapters.Memory({
+                db: getEmptyDbContentRaw(),
+            });
+            const jsonDB = new JsonDB<DbRes>({
+                adapter: memAdapter,
+            });
+
+            await Promise.all([
+                new Promise(async res => {
+                    memAdapter.delay = 50;
+                    await jsonDB.insert('projects', {name: 'p1', tagsIds: []});
+                    res(null);
+                }),
+                new Promise(async res => {
+                    memAdapter.delay = 25;
+                    await jsonDB.insert('projects', {name: 'p2', tagsIds: []});
+                    res(null);
+                }),
+                new Promise(async res => {
+                    memAdapter.delay = 0;
+                    await jsonDB.insert('projects', {name: 'p3', tagsIds: []});
+                    res(null);
+                }),
+            ]);
+
+            const data = await jsonDB.read();
+
+            // should.equal(data.projects.length, 3);
+            should.deepEqual(data.projects.map(p => p.name), ['p1', 'p2', 'p3']);
+        });
+
+        it('update actions wait for other modify actions to finish');
+
+        it('delete actions wait for other modify actions to finish');
     });
 
     describe('creating record', () => {

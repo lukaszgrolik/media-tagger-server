@@ -1,9 +1,12 @@
 // import * as _ from 'lodash'
-import * as path from 'path'
-import * as fs from 'fs'
 // import * as moment from 'moment'
 // import { sync as writeFileAtomicSync } from 'write-file-atomic'
 // import * as writeFileAtomic from 'write-file-atomic'
+
+import { Adapters } from './adapters';
+import PromiseQueue from './promise-queue';
+
+export * from './adapters';
 
 export type RecordId = number;
 
@@ -77,81 +80,23 @@ interface CommonFields {
     updatedAt: string;
 }
 
-abstract class JsonDbAdapter {
+export abstract class JsonDbAdapter {
     abstract read(): string | Promise<string>;
     abstract write(text: string): void | Promise<void>;
 }
 
-export namespace Adapters {
-    export class Memory extends JsonDbAdapter {
-        constructor(readonly opts?: {db?: string}) {
-            super();
-
-            if (opts?.db) this.db = opts.db;
-        }
-
-        db = '';
-
-        read() {
-            return this.db;
-        }
-
-        write(text: string) {
-            this.db = text;
-        }
-    }
-
-    export class File extends JsonDbAdapter {
-        constructor(readonly opts: {filePath: string}) {
-            super();
-        }
-
-        read() {
-            return fs.promises.readFile(this.opts.filePath, { encoding: 'utf-8' });
-        }
-
-        write(text: string) {
-            return fs.promises.writeFile(this.opts.filePath, text);
-        }
-    }
-
-    interface LSLike {
-        getItem(key: string): string | null;
-        setItem(key: string, value: string): void;
-        // removeItem(key: string): void;
-        // clear(): void;
-    }
-
-    // declare var localStorage: LSLike;
-
-    export class LocalStorage extends JsonDbAdapter {
-        private localStorage: LSLike;
-
-        constructor(readonly opts: {name: string, localStorage?: LSLike}) {
-            super();
-
-            if (this.opts.localStorage !== undefined) this.localStorage = this.opts.localStorage;
-        }
-
-        read() {
-            const val = this.localStorage.getItem(this.opts.name);
-            if (val === null) throw new Error(`localStorage db does not exist under the key: ${this.opts.name}`);
-
-            return val;
-        }
-
-        write(text: string) {
-            return this.localStorage.setItem(this.opts.name, text);
-        }
-    }
-}
-
-interface Opts {
+interface Opts<T extends { [K in keyof T]: CommonFields }> {
     // readonly filePath: string;
     readonly adapter: JsonDbAdapter;
     readonly backupFile?: boolean;
     // readonly findById: (coll: keyof Res, rec: Res[keyof Res], id: RecordId) => boolean;
     // collections: (keyof FileContent<Response>['collections'])[]
+    readonly hooks?: {
+        [K in keyof T]?: {
+            // beforeDelete
+            beforeDelete?: (id: RecordId) => void | Promise<void>;
+        };
+    }
 }
 
 // export default class JsonDB<TResponse, TPayload extends {[K in keyof TPayload]: object}> {
@@ -163,7 +108,9 @@ export class JsonDB<
     > {
     // private currentIO: Promise<any> = Promise.resolve();
 
-    constructor(readonly opts: Opts) {
+    private writeOpsQueue = new PromiseQueue();
+
+    constructor(readonly opts: Opts<T>) {
 
     }
 
@@ -305,7 +252,7 @@ export class JsonDB<
     //     return record
     // }
 
-    async insert<C extends keyof T>(collName: C, body: Omit<T[C], keyof CommonFields>): Promise<T[C]> {
+    private async insertOp<C extends keyof T>(collName: C, body: Omit<T[C], keyof CommonFields>): Promise<T[C]> {
         this.preValidateBody(body);
         if (this.validate_onInsert) this.validate_onInsert(collName, body);
 
@@ -334,6 +281,12 @@ export class JsonDB<
         await this.saveData(fileContent);
 
         return record;
+    }
+
+    async insert<C extends keyof T>(collName: C, body: Omit<T[C], keyof CommonFields>): Promise<T[C]> {
+        return this.writeOpsQueue.enqueue(() => {
+            return this.insertOp(collName, body);
+        });
     }
 
     // insertMany(coll: keyof Res, bodyArr: Body[keyof Body][]) {
@@ -400,6 +353,11 @@ export class JsonDB<
     }
 
     async delete<C extends keyof T>(collName: C, id: RecordId): Promise<T[C]> {
+        if (this.opts.hooks && this.opts.hooks[collName]) {
+            const collHooks = this.opts.hooks[collName];
+            if (collHooks && collHooks.beforeDelete) await collHooks.beforeDelete(id);
+        }
+
         if (this.validate_onDelete) this.validate_onDelete(collName, id);
 
         const fileContent = await this.loadData();
