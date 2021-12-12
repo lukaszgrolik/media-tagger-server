@@ -122,7 +122,11 @@ describe('JsonDB', () => {
         //     });
         // });
 
-        it('throws when any record has invalid schema');
+        // it('throws when any record has invalid schema');
+
+        it('invokes beforeInsert hook');
+
+        it('invokes beforeUpdate hook');
 
         it('invokes beforeDelete hook', async () => {
             // jsonDB.validate.onInsert((collName, body) => {
@@ -189,6 +193,12 @@ describe('JsonDB', () => {
                 await jsonDB.delete('tags', 1);
             }, 'cannot delete tag that is assigned to a project');
         });
+
+        it('invokes afterInsert hook');
+
+        it('invokes afterUpdate hook');
+
+        it('invokes afterDelete hook');
     });
 
     it('loads content', async () => {
@@ -212,14 +222,46 @@ describe('JsonDB', () => {
     });
 
     describe('modification', () => {
-        it('insert actions wait for other modify actions to finish', async () => {
-            const memAdapter = new Adapters.Memory({
+        let memAdapter: Adapters.Memory;
+        let jsonDB: JsonDB<DbRes>;
+        const ops: string[] = [];
+
+        beforeEach(() => {
+            memAdapter = new Adapters.Memory({
                 db: getEmptyDbContentRaw(),
             });
-            const jsonDB = new JsonDB<DbRes>({
+            jsonDB = new JsonDB<DbRes>({
                 adapter: memAdapter,
+                hooks: {
+                    projects: {
+                        beforeInsert: body => {
+                            ops.push(`${body.name} beforeInsert`);
+                        },
+                        beforeUpdate: (id, body) => {
+                            ops.push(`${body.name} beforeUpdate`);
+                        },
+                        beforeDelete: id => {
+                            ops.push(`#${id} beforeDelete`);
+                        },
+                        afterInsert: record => {
+                            ops.push(`${record.name} afterInsert`);
+                        },
+                        afterUpdate: record => {
+                            ops.push(`${record.name} afterUpdate`);
+                        },
+                        afterDelete: record => {
+                            ops.push(`${record.name} afterDelete`);
+                        },
+                    },
+                },
             });
+        });
 
+        afterEach(() => {
+            ops.length = 0;
+        });
+
+        it('insert actions wait for other modify actions to finish', async () => {
             await Promise.all([
                 new Promise(async res => {
                     memAdapter.delay = 50;
@@ -240,13 +282,159 @@ describe('JsonDB', () => {
 
             const data = await jsonDB.read();
 
-            // should.equal(data.projects.length, 3);
             should.deepEqual(data.projects.map(p => p.name), ['p1', 'p2', 'p3']);
+            should.deepEqual(ops, [
+                'p1 beforeInsert', 'p1 afterInsert',
+                'p2 beforeInsert', 'p2 afterInsert',
+                'p3 beforeInsert', 'p3 afterInsert'
+            ]);
         });
 
-        it('update actions wait for other modify actions to finish');
+        it('update actions wait for other modify actions to finish', async () => {
+            const project = await jsonDB.insert('projects', { name: 'p1', tagsIds: [] });
 
-        it('delete actions wait for other modify actions to finish');
+            await Promise.all([
+                new Promise(async res => {
+                    memAdapter.delay = 50;
+                    await jsonDB.update('projects', project.id, {name: 'p1 update1', tagsIds: []});
+                    res(null);
+                }),
+                new Promise(async res => {
+                    memAdapter.delay = 25;
+                    await jsonDB.update('projects', project.id, {name: 'p1 update2', tagsIds: []});
+                    res(null);
+                }),
+                new Promise(async res => {
+                    memAdapter.delay = 0;
+                    await jsonDB.update('projects', project.id, {name: 'p1 update3', tagsIds: []});
+                    res(null);
+                }),
+            ]);
+
+            const data = await jsonDB.read();
+
+            should.equal(data.projects[0].name, 'p1 update3');
+            should.deepEqual(ops, [
+                'p1 beforeInsert', 'p1 afterInsert',
+                // *** //
+                'p1 update1 beforeUpdate', 'p1 update1 afterUpdate',
+                'p1 update2 beforeUpdate', 'p1 update2 afterUpdate',
+                'p1 update3 beforeUpdate', 'p1 update3 afterUpdate'
+            ]);
+        });
+
+        it('delete actions wait for other modify actions to finish', async () => {
+            const p1 = await jsonDB.insert('projects', { name: 'p1', tagsIds: [] });
+            const p2 = await jsonDB.insert('projects', { name: 'p2', tagsIds: [] });
+            const p3 = await jsonDB.insert('projects', { name: 'p3', tagsIds: [] });
+
+            await Promise.all([
+                new Promise(async res => {
+                    memAdapter.delay = 50;
+                    await jsonDB.delete('projects', p1.id);
+                    res(null);
+                }),
+                new Promise(async res => {
+                    memAdapter.delay = 25;
+                    await jsonDB.delete('projects', p2.id);
+                    res(null);
+                }),
+                new Promise(async res => {
+                    memAdapter.delay = 0;
+                    await jsonDB.delete('projects', p3.id);
+                    res(null);
+                }),
+            ]);
+
+            const data = await jsonDB.read();
+
+            should.equal(data.projects.length, 0);
+            should.deepEqual(ops, [
+                'p1 beforeInsert', 'p1 afterInsert',
+                'p2 beforeInsert', 'p2 afterInsert',
+                'p3 beforeInsert', 'p3 afterInsert',
+                // *** //
+                '#1 beforeDelete', 'p1 afterDelete',
+                '#2 beforeDelete', 'p2 afterDelete',
+                '#3 beforeDelete', 'p3 afterDelete'
+            ]);
+        });
+
+        it('transactions wait for other modify actions to finish', async () => {
+            let p1: DbRes['projects'];
+            let p2: DbRes['projects'];
+            let p3: DbRes['projects'];
+
+            await Promise.all([
+                new Promise(async res => {
+                    memAdapter.delay = 50;
+                    await jsonDB.transaction(async tx => {
+                        p1 = await tx.insert('projects', { name: 'p1', tagsIds: [] });
+                        await tx.update('projects', p1.id, { name: 'p1 update1', tagsIds: [] });
+                    });
+                    res(null);
+                }),
+                new Promise(async res => {
+                    memAdapter.delay = 25;
+                    await jsonDB.transaction(async tx => {
+                        p2 = await tx.insert('projects', { name: 'p2', tagsIds: [] });
+                        p3 = await tx.insert('projects', { name: 'p3', tagsIds: [] });
+                        await tx.delete('projects', p1.id);
+                    });
+                    res(null);
+                }),
+                new Promise(async res => {
+                    memAdapter.delay = 0;
+                    await jsonDB.transaction(async tx => {
+                        await tx.update('projects', p2.id, { name: 'p2 update1' });
+                        await tx.update('projects', p3.id, { name: 'p3 update1' });
+                    });
+                    res(null);
+                }),
+            ]);
+
+            const data = await jsonDB.read();
+
+            should.equal(data.projects.length, 2);
+            should.deepEqual(ops, [
+                'p1 beforeInsert', 'p1 afterInsert',
+                'p1 update1 beforeUpdate', 'p1 update1 afterUpdate',
+                // *** //
+                'p2 beforeInsert', 'p2 afterInsert',
+                'p3 beforeInsert', 'p3 afterInsert',
+                '#1 beforeDelete', 'p1 update1 afterDelete',
+                // *** //
+                'p2 update1 beforeUpdate', 'p2 update1 afterUpdate',
+                'p3 update1 beforeUpdate', 'p3 update1 afterUpdate',
+            ]);
+        });
+
+        it('various modify actions execute one at a time', async () => {
+            await Promise.all([
+                jsonDB.insert('projects', { name: 'p1', tagsIds: [] }),
+                jsonDB.update('projects', 1, { name: 'p1 update1', tagsIds: [] }),
+                jsonDB.insert('projects', { name: 'p2', tagsIds: [] }),
+                jsonDB.insert('projects', { name: 'p3', tagsIds: [] }),
+                jsonDB.delete('projects', 1),
+                jsonDB.update('projects', 2, { name: 'p2 update1' }),
+                jsonDB.update('projects', 3, { name: 'p3 update1' }),
+            ]);
+
+            const data = await jsonDB.read();
+
+            should.equal(data.projects.length, 2);
+            should.deepEqual(ops, [
+                'p1 beforeInsert', 'p1 afterInsert',
+                'p1 update1 beforeUpdate', 'p1 update1 afterUpdate',
+                // *** //
+                'p2 beforeInsert', 'p2 afterInsert',
+                'p3 beforeInsert', 'p3 afterInsert',
+                '#1 beforeDelete', 'p1 update1 afterDelete',
+                // *** //
+                'p2 update1 beforeUpdate', 'p2 update1 afterUpdate',
+                'p3 update1 beforeUpdate', 'p3 update1 afterUpdate',
+            ]);
+        });
     });
 
     describe('creating record', () => {
@@ -462,57 +650,57 @@ describe('JsonDB', () => {
         });
     });
 
-    describe('batch', () => {
-        it('executes in sequence', async () => {
-            await jsonDB.insert('projects', {name: 'p1', tagsIds: []});
-            await jsonDB.insert('projects', {name: 'p2', tagsIds: []});
-            await jsonDB.insert('projects', {name: 'p3', tagsIds: []});
+    // describe('batch', () => {
+    //     it('executes in sequence', async () => {
+    //         await jsonDB.insert('projects', {name: 'p1', tagsIds: []});
+    //         await jsonDB.insert('projects', {name: 'p2', tagsIds: []});
+    //         await jsonDB.insert('projects', {name: 'p3', tagsIds: []});
 
-            const batchRes = await jsonDB.batch([
-                {
-                    type: 'insert',
-                    collection: 'projects',
-                    body: {name: 'p4'},
-                },
-                {
-                    type: 'insert',
-                    collection: 'tags',
-                    body: {name: 'p4'},
-                },
-                {
-                    type: 'update',
-                    collection: 'projects',
-                    id: 1,
-                    body: {name: 'p1 updated'}
-                },
-                {
-                    type: 'update',
-                    collection: 'projects',
-                    id: 2,
-                    body: {name: 'p2 updated'}
-                },
-                {
-                    type: 'delete',
-                    collection: 'projects',
-                    id: 3,
-                },
-            ]);
+    //         const batchRes = await jsonDB.batch([
+    //             {
+    //                 type: 'insert',
+    //                 collection: 'projects',
+    //                 body: {name: 'p4'},
+    //             },
+    //             {
+    //                 type: 'insert',
+    //                 collection: 'tags',
+    //                 body: {name: 'p4'},
+    //             },
+    //             {
+    //                 type: 'update',
+    //                 collection: 'projects',
+    //                 id: 1,
+    //                 body: {name: 'p1 updated'}
+    //             },
+    //             {
+    //                 type: 'update',
+    //                 collection: 'projects',
+    //                 id: 2,
+    //                 body: {name: 'p2 updated'}
+    //             },
+    //             {
+    //                 type: 'delete',
+    //                 collection: 'projects',
+    //                 id: 3,
+    //             },
+    //         ]);
 
-            should.equal(batchRes.length, 5);
+    //         should.equal(batchRes.length, 5);
 
-            const data = await jsonDB.read();
+    //         const data = await jsonDB.read();
 
-            should.equal(data.projects.length, 3);
-            should.equal(data.projects[0].name, 'p1 updated');
-            should.equal(data.projects[1].name, 'p2 updated');
-            should.equal(data.projects[2].id, 4);
-            should.equal(data.projects[2].name, 'p4');
-        });
+    //         should.equal(data.projects.length, 3);
+    //         should.equal(data.projects[0].name, 'p1 updated');
+    //         should.equal(data.projects[1].name, 'p2 updated');
+    //         should.equal(data.projects[2].id, 4);
+    //         should.equal(data.projects[2].name, 'p4');
+    //     });
 
-        it('returns array of results');
+    //     it('returns array of results');
 
-        it('reverts all operations if an error occurred in any of them');
-    });
+    //     it('reverts all operations if an error occurred in any of them');
+    // });
 
     describe('transactions', () => {
         describe('commit', () => {

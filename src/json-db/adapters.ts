@@ -1,82 +1,83 @@
 import * as path from 'path'
 import * as fs from 'fs'
 
-import { JsonDbAdapter } from "./json-db";
+export abstract class JsonDbAdapter {
+    abstract read(): string | Promise<string>;
+    abstract write(text: string): void | Promise<void>;
+}
 
-export namespace Adapters {
-    export class Memory extends JsonDbAdapter {
-        constructor(readonly opts?: { db?: string }) {
-            super();
+export class Memory extends JsonDbAdapter {
+    constructor(readonly opts?: { db?: string }) {
+        super();
 
-            if (opts?.db) this.db = opts.db;
+        if (opts?.db) this.db = opts.db;
+    }
+
+    db = '';
+    delay = 0;
+
+    read() {
+        return this.db;
+    }
+
+    write(text: string): void | Promise<void> {
+        const updateDb = () => this.db = text;
+
+        if (this.delay === 0) {
+            updateDb();
+            return;
         }
 
-        db = '';
-        delay = 0;
-
-        read() {
-            return this.db;
-        }
-
-        write(text: string): void | Promise<void> {
-            const updateDb = () => this.db = text;
-
-            if (this.delay === 0) {
+        return new Promise(res => {
+            setTimeout(() => {
                 updateDb();
-                return;
-            }
 
-            return new Promise(res => {
-                setTimeout(() => {
-                    updateDb();
+                res();
+            }, this.delay);
+        });
+    }
+}
 
-                    res();
-                }, this.delay);
-            });
-        }
+export class File extends JsonDbAdapter {
+    constructor(readonly opts: { filePath: string }) {
+        super();
     }
 
-    export class File extends JsonDbAdapter {
-        constructor(readonly opts: { filePath: string }) {
-            super();
-        }
-
-        read() {
-            return fs.promises.readFile(this.opts.filePath, { encoding: 'utf-8' });
-        }
-
-        write(text: string) {
-            return fs.promises.writeFile(this.opts.filePath, text);
-        }
+    read() {
+        return fs.promises.readFile(this.opts.filePath, { encoding: 'utf-8' });
     }
 
-    interface LSLike {
-        getItem(key: string): string | null;
-        setItem(key: string, value: string): void;
-        // removeItem(key: string): void;
-        // clear(): void;
+    write(text: string) {
+        return fs.promises.writeFile(this.opts.filePath, text);
+    }
+}
+
+interface LSLike {
+    getItem(key: string): string | null;
+    setItem(key: string, value: string): void;
+    // removeItem(key: string): void;
+    // clear(): void;
+}
+
+// declare var localStorage: LSLike;
+
+export class LocalStorage extends JsonDbAdapter {
+    private localStorage: LSLike;
+
+    constructor(readonly opts: { name: string, localStorage?: LSLike }) {
+        super();
+
+        if (this.opts.localStorage !== undefined) this.localStorage = this.opts.localStorage;
     }
 
-    // declare var localStorage: LSLike;
+    read() {
+        const val = this.localStorage.getItem(this.opts.name);
+        if (val === null) throw new Error(`localStorage db does not exist under the key: ${this.opts.name}`);
 
-    export class LocalStorage extends JsonDbAdapter {
-        private localStorage: LSLike;
+        return val;
+    }
 
-        constructor(readonly opts: { name: string, localStorage?: LSLike }) {
-            super();
-
-            if (this.opts.localStorage !== undefined) this.localStorage = this.opts.localStorage;
-        }
-
-        read() {
-            const val = this.localStorage.getItem(this.opts.name);
-            if (val === null) throw new Error(`localStorage db does not exist under the key: ${this.opts.name}`);
-
-            return val;
-        }
-
-        write(text: string) {
-            return this.localStorage.setItem(this.opts.name, text);
-        }
+    write(text: string) {
+        return this.localStorage.setItem(this.opts.name, text);
     }
 }

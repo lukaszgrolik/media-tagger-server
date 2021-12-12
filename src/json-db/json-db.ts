@@ -3,10 +3,10 @@
 // import { sync as writeFileAtomicSync } from 'write-file-atomic'
 // import * as writeFileAtomic from 'write-file-atomic'
 
-import { Adapters } from './adapters';
+import * as Adapters from './adapters';
 import PromiseQueue from './promise-queue';
 
-export * from './adapters';
+export * as Adapters from './adapters';
 
 export type RecordId = number;
 
@@ -40,39 +40,28 @@ export function getEmptyFileContents(collNames: string[]) {
     return res;
 };
 
-interface Bla {
-    a: {x: number};
-    b: {y: string};
-}
+// interface BatchInsertOp<T, C extends keyof T = keyof T> {
+//     type: 'insert';
+//     collection: C;
+//     body: Omit<T[C], keyof CommonFields>;
+//     // body: T[C];
+// }
 
-const x: BatchInsertOp<Bla> = {
-    type: 'insert',
-    collection: 'a',
-    body: {},
-};
+// interface BatchUpdateOp<T, C extends keyof T = keyof T> {
+//     type: 'update';
+//     collection: C;
+//     id: RecordId;
+//     body: Partial<Omit<T[C], keyof CommonFields>>;
+// }
 
-interface BatchInsertOp<T, C extends keyof T = keyof T> {
-    type: 'insert';
-    collection: C;
-    body: Omit<T[C], keyof CommonFields>;
-    // body: T[C];
-}
+// interface BatchDeleteOp<T, C extends keyof T = keyof T> {
+//     type: 'delete';
+//     collection: C;
+//     id: RecordId;
+// }
 
-interface BatchUpdateOp<T, C extends keyof T = keyof T> {
-    type: 'update';
-    collection: C;
-    id: RecordId;
-    body: Partial<Omit<T[C], keyof CommonFields>>;
-}
-
-interface BatchDeleteOp<T, C extends keyof T = keyof T> {
-    type: 'delete';
-    collection: C;
-    id: RecordId;
-}
-
-// type BatchOp<T, C extends keyof T> = BatchInsertOp<T, C> | BatchUpdateOp<T, C> | BatchDeleteOp<T, C>;
-type BatchOp<T> = BatchInsertOp<T> | BatchUpdateOp<T> | BatchDeleteOp<T>;
+// // type BatchOp<T, C extends keyof T> = BatchInsertOp<T, C> | BatchUpdateOp<T, C> | BatchDeleteOp<T, C>;
+// type BatchOp<T> = BatchInsertOp<T> | BatchUpdateOp<T> | BatchDeleteOp<T>;
 
 interface CommonFields {
     id: RecordId;
@@ -80,21 +69,20 @@ interface CommonFields {
     updatedAt: string;
 }
 
-export abstract class JsonDbAdapter {
-    abstract read(): string | Promise<string>;
-    abstract write(text: string): void | Promise<void>;
-}
-
 interface Opts<T extends { [K in keyof T]: CommonFields }> {
     // readonly filePath: string;
-    readonly adapter: JsonDbAdapter;
+    readonly adapter: Adapters.JsonDbAdapter;
     readonly backupFile?: boolean;
     // readonly findById: (coll: keyof Res, rec: Res[keyof Res], id: RecordId) => boolean;
     // collections: (keyof FileContent<Response>['collections'])[]
     readonly hooks?: {
-        [K in keyof T]?: {
-            // beforeDelete
+        [C in keyof T]?: {
+            beforeInsert?: (body: Omit<T[C], keyof CommonFields>) => void | Promise<void>;
+            beforeUpdate?: (id: RecordId, body: Partial<Omit<T[C], keyof CommonFields>>) => void | Promise<void>;
             beforeDelete?: (id: RecordId) => void | Promise<void>;
+            afterInsert?: (record: T[C]) => void | Promise<void>;
+            afterUpdate?: (record: T[C]) => void | Promise<void>;
+            afterDelete?: (record: T[C]) => void | Promise<void>;
         };
     }
 }
@@ -213,21 +201,21 @@ export class JsonDB<
     //     });
     // }
 
-    readonly validate = {
-        onInsert: (cb: <C extends keyof T>(collName: C, body: Omit<T[C], keyof CommonFields>) => void) => {
-            this.validate_onInsert = cb;
-        },
-        onUpdate: (cb: <C extends keyof T>(collName: C, id: RecordId, body: Partial<Omit<T[C], keyof CommonFields>>) => void) => {
-            this.validate_onUpdate = cb;
-        },
-        onDelete: (cb: <C extends keyof T>(collName: C, id: RecordId) => void) => {
-            this.validate_onDelete = cb;
-        },
-    };
+    // readonly validate = {
+    //     onInsert: (cb: <C extends keyof T>(collName: C, body: Omit<T[C], keyof CommonFields>) => void) => {
+    //         this.validate_onInsert = cb;
+    //     },
+    //     onUpdate: (cb: <C extends keyof T>(collName: C, id: RecordId, body: Partial<Omit<T[C], keyof CommonFields>>) => void) => {
+    //         this.validate_onUpdate = cb;
+    //     },
+    //     onDelete: (cb: <C extends keyof T>(collName: C, id: RecordId) => void) => {
+    //         this.validate_onDelete = cb;
+    //     },
+    // };
 
-    private validate_onInsert?: <C extends keyof T>(collName: C, body: Omit<T[C], keyof CommonFields>) => void;
-    private validate_onUpdate?: <C extends keyof T>(collName: C, id: RecordId, body: Partial<Omit<T[C], keyof CommonFields>>) => void;
-    private validate_onDelete?: <C extends keyof T>(collName: C, id: RecordId) => void;
+    // private validate_onInsert?: <C extends keyof T>(collName: C, body: Omit<T[C], keyof CommonFields>) => void;
+    // private validate_onUpdate?: <C extends keyof T>(collName: C, id: RecordId, body: Partial<Omit<T[C], keyof CommonFields>>) => void;
+    // private validate_onDelete?: <C extends keyof T>(collName: C, id: RecordId) => void;
 
     async read(): Promise<CollectionsObj<T>> {
         const fileContent = await this.loadData();
@@ -254,7 +242,13 @@ export class JsonDB<
 
     private async insertOp<C extends keyof T>(collName: C, body: Omit<T[C], keyof CommonFields>): Promise<T[C]> {
         this.preValidateBody(body);
-        if (this.validate_onInsert) this.validate_onInsert(collName, body);
+
+        if (this.opts.hooks && this.opts.hooks[collName]) {
+            const collHooks = this.opts.hooks[collName];
+            if (collHooks && collHooks.beforeInsert) await collHooks.beforeInsert(body);
+        }
+
+        // if (this.validate_onInsert) this.validate_onInsert(collName, body);
 
         const fileContent = await this.loadData();
         const date = this.getDateString();
@@ -280,12 +274,70 @@ export class JsonDB<
         // await this.saveData(fileContent)
         await this.saveData(fileContent);
 
+        if (this.opts.hooks && this.opts.hooks[collName]) {
+            const collHooks = this.opts.hooks[collName];
+            if (collHooks && collHooks.afterInsert) await collHooks.afterInsert(record);
+        }
+
         return record;
     }
 
     async insert<C extends keyof T>(collName: C, body: Omit<T[C], keyof CommonFields>): Promise<T[C]> {
         return this.writeOpsQueue.enqueue(() => {
             return this.insertOp(collName, body);
+        });
+    }
+
+    private async insertManyOp<C extends keyof T>(collName: C, bodyArr: Omit<T[C], keyof CommonFields>[]): Promise<T[C][]> {
+        for (const body of bodyArr) {
+            this.preValidateBody(body);
+        }
+
+        if (this.opts.hooks && this.opts.hooks[collName]) {
+            const collHooks = this.opts.hooks[collName];
+
+            for (const body of bodyArr) {
+                if (collHooks && collHooks.beforeInsert) await collHooks.beforeInsert(body);
+            }
+        }
+
+        const fileContent = await this.loadData();
+        const date = this.getDateString();
+
+        const baseObj: CommonFields = {
+            id: 0,
+            createdAt: date,
+            updatedAt: date,
+        };
+        const records = bodyArr.map(body => {
+            const record = {
+                ...baseObj,
+                ...body,
+            } as T[C];
+            record.id = ++fileContent.counters[collName];
+
+            return record;
+        });
+
+        fileContent.collections[collName].push(...records);
+
+        // await this.saveData(fileContent)
+        await this.saveData(fileContent);
+
+        if (this.opts.hooks && this.opts.hooks[collName]) {
+            const collHooks = this.opts.hooks[collName];
+
+            for (const record of records) {
+                if (collHooks && collHooks.afterInsert) await collHooks.afterInsert(record);
+            }
+        }
+
+        return records;
+    }
+
+    async insertMany<C extends keyof T>(collName: C, bodyArr: Omit<T[C], keyof CommonFields>[]): Promise<T[C][]> {
+        return this.writeOpsQueue.enqueue(() => {
+            return this.insertManyOp(collName, bodyArr);
         });
     }
 
@@ -316,9 +368,15 @@ export class JsonDB<
     //     return x;
     // }
 
-    async update<C extends keyof T>(collName: C, id: RecordId, body: Partial<Omit<T[C], keyof CommonFields>>): Promise<T[C]> {
+    private async updateOp<C extends keyof T>(collName: C, id: RecordId, body: Partial<Omit<T[C], keyof CommonFields>>): Promise<T[C]> {
         this.preValidateBody(body);
-        if (this.validate_onUpdate) this.validate_onUpdate(collName, id, body);
+
+        if (this.opts.hooks && this.opts.hooks[collName]) {
+            const collHooks = this.opts.hooks[collName];
+            if (collHooks && collHooks.beforeUpdate) await collHooks.beforeUpdate(id, body);
+        }
+
+        // if (this.validate_onUpdate) this.validate_onUpdate(collName, id, body);
 
         // await this.testIO
 
@@ -326,7 +384,7 @@ export class JsonDB<
         const fileContent = await this.loadData();
         // const record = this.getRecordById(fileContent.collections, coll, id);
         const record = fileContent.collections[collName].find(rec => rec.id === id);
-        if (!record) throw new Error();
+        if (!record) throw new Error(`record not found (id=${id})`);
 
         const updatedAt = this.getDateString();
 
@@ -341,6 +399,11 @@ export class JsonDB<
         //   }, 1000)
         // })
 
+        if (this.opts.hooks && this.opts.hooks[collName]) {
+            const collHooks = this.opts.hooks[collName];
+            if (collHooks && collHooks.afterUpdate) await collHooks.afterUpdate(record);
+        }
+
         return record;
         // res(record)
         // }
@@ -352,62 +415,79 @@ export class JsonDB<
         // return this.testIO
     }
 
-    async delete<C extends keyof T>(collName: C, id: RecordId): Promise<T[C]> {
+    async update<C extends keyof T>(collName: C, id: RecordId, body: Partial<Omit<T[C], keyof CommonFields>>): Promise<T[C]> {
+        return this.writeOpsQueue.enqueue(() => {
+            return this.updateOp(collName, id, body);
+        });
+    }
+
+    private async deleteOp<C extends keyof T>(collName: C, id: RecordId): Promise<T[C]> {
         if (this.opts.hooks && this.opts.hooks[collName]) {
             const collHooks = this.opts.hooks[collName];
             if (collHooks && collHooks.beforeDelete) await collHooks.beforeDelete(id);
         }
 
-        if (this.validate_onDelete) this.validate_onDelete(collName, id);
+        // if (this.validate_onDelete) this.validate_onDelete(collName, id);
 
         const fileContent = await this.loadData();
         const record = fileContent.collections[collName].find(rec => rec.id === id);
-        if (!record) throw new Error();
+        if (!record) throw new Error(`record not found (id=${id})`);
 
         const index = fileContent.collections[collName].indexOf(record);
         fileContent.collections[collName].splice(index, 1);
 
         await this.saveData(fileContent);
 
+        if (this.opts.hooks && this.opts.hooks[collName]) {
+            const collHooks = this.opts.hooks[collName];
+            if (collHooks && collHooks.afterDelete) await collHooks.afterDelete(record);
+        }
+
         return record;
     }
 
-    // @todo fix typescript body check
-    // batch<C extends keyof T>(ops: BatchOp<T, C>[]) {
-    async batch(ops: BatchOp<T>[]) {
-        const dataBefore = await this.loadData();
-        const res = [];
-
-        try {
-            for (const op of ops) {
-                let data;
-
-                if (op.type === 'insert') {
-                    data = await this.insert(op.collection, op.body);
-                }
-                else if (op.type === 'update') {
-                    data = await this.update(op.collection, op.id, op.body);
-                }
-                else if (op.type === 'delete') {
-                    data = await this.delete(op.collection, op.id);
-                }
-                else {
-                    throw new Error(`invalid operation type: ${(op as any).type}`);
-                }
-
-                res.push(data);
-            }
-        }
-        catch (err) {
-            await this.saveData(dataBefore);
-
-            throw err;
-        }
-
-        return res;
+    async delete<C extends keyof T>(collName: C, id: RecordId): Promise<T[C]> {
+        return this.writeOpsQueue.enqueue(() => {
+            return this.deleteOp(collName, id);
+        });
     }
 
-    async transaction(cb: (tx: JsonDB<T>) => void | Promise<void>) {
+    // // @todo fix typescript body check
+    // // batch<C extends keyof T>(ops: BatchOp<T, C>[]) {
+    // async batch(ops: BatchOp<T>[]) {
+    //     const dataBefore = await this.loadData();
+    //     const res = [];
+
+    //     try {
+    //         for (const op of ops) {
+    //             let data;
+
+    //             if (op.type === 'insert') {
+    //                 data = await this.insert(op.collection, op.body);
+    //             }
+    //             else if (op.type === 'update') {
+    //                 data = await this.update(op.collection, op.id, op.body);
+    //             }
+    //             else if (op.type === 'delete') {
+    //                 data = await this.delete(op.collection, op.id);
+    //             }
+    //             else {
+    //                 throw new Error(`invalid operation type: ${(op as any).type}`);
+    //             }
+
+    //             res.push(data);
+    //         }
+    //     }
+    //     catch (err) {
+    //         await this.saveData(dataBefore);
+
+    //         throw err;
+    //     }
+
+    //     return res;
+    // }
+
+    private async transactionOp(cb: (tx: JsonDB<T>) => void | Promise<void>) {
         const dbText = await this.readDbRaw();
 
         const memAdapter = new Adapters.Memory({ db: dbText });
@@ -421,6 +501,12 @@ export class JsonDB<
         await this.writeDbRaw(memAdapter.db);
     }
 
+    async transaction(cb: (tx: JsonDB<T>) => void | Promise<void>) {
+        return this.writeOpsQueue.enqueue(() => {
+            return this.transactionOp(cb);
+        });
+    }
+
     async clear() {
         const fileContent = await this.loadData();
 
@@ -432,7 +518,3 @@ export class JsonDB<
         await this.saveData(fileContent);
     }
 }
-
-// interface CUDHandle {
-//     create
-// }
