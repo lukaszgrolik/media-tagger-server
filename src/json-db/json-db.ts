@@ -487,7 +487,7 @@ export class JsonDB<
     //     return res;
     // }
 
-    private async transactionOp(cb: (tx: JsonDB<T>) => void | Promise<void>) {
+    private async transactionOp<S>(cb: (tx: JsonDB<T>) => S | Promise<S>): Promise<S> {
         const dbText = await this.readDbRaw();
 
         const memAdapter = new Adapters.Memory({ db: dbText });
@@ -496,12 +496,14 @@ export class JsonDB<
             adapter: memAdapter,
         });
 
-        await cb(tempDb);
+        const res = await cb(tempDb);
 
         await this.writeDbRaw(memAdapter.db);
+
+        return res;
     }
 
-    async transaction(cb: (tx: JsonDB<T>) => void | Promise<void>) {
+    async transaction<S>(cb: (tx: JsonDB<T>) => S | Promise<S>): Promise<S> {
         return this.writeOpsQueue.enqueue(() => {
             return this.transactionOp(cb);
         });

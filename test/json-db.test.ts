@@ -811,6 +811,8 @@ describe('JsonDB', () => {
                 should.equal(data.projects[0].id, 1);
                 should.equal(data.projects[0].name, 'p0');
             });
+
+            it('returns value from callback');
         });
 
         describe('rollback', () => {
