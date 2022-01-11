@@ -2,6 +2,7 @@
   "scripts": {
     "dev": "ts-node-dev ./src/index.ts",
     "test": "npx mocha ./test/**/*.test.ts --require ts-node/register",
+    "test:actions": "npx mocha ./src/actions/test/**/*.test.ts --require ts-node/register",
     "gen-thumb": "ts-node ./src/generate-thumbnails/generate-thumbnails.ts"
   },
   "dependencies": {

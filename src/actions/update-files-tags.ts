@@ -77,29 +77,29 @@ export const updateFilesTags = async (opts: Opts): Promise<{tags: DbTagBody[]; f
         if (!found) throw new Error(`tag not found (id=${tagId})`);
     });
 
-    const dbRes = await opts.db.transaction(async tx => {
-        const files: DbFileBody[] = [];
+    const files: DbFileBody[] = [];
 
-        // validate file ids exist
-        opts.body.ids?.forEach(fileId => {
-            const found = data.files.find(f => f.id === fileId);
-            if (!found) throw new Error(`file not found (id=${fileId})`);
+    // validate file ids exist
+    opts.body.ids?.forEach(fileId => {
+        const found = data.files.find(f => f.id === fileId);
+        if (!found) throw new Error(`file not found (id=${fileId})`);
+
+        files.push(found);
+    });
+
+    opts.body.filePaths?.forEach(fp => {
+        const found = data.files.find(f => f.path === fp);
+
+        if (found) {
+            if (files.map(f => f.id).includes(found.id)) {
+                throw new Error(`file already given as id (path="${fp}", id=${found.id})`);
+            }
 
             files.push(found);
-        });
+        }
+    });
 
-        opts.body.filePaths?.forEach(fp => {
-            const found = data.files.find(f => f.path === fp);
-
-            if (found) {
-                if (files.map(f => f.id).includes(found.id)) {
-                    throw new Error(`file already given as id (path=${fp}, id=${found.id})`);
-                }
-
-                files.push(found);
-            }
-        });
-
+    const dbRes = await opts.db.transaction(async tx => {
         // create unexisting files by file path
 
         if (opts.body.filePaths?.length) {

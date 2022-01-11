@@ -5,26 +5,7 @@ import 'mocha';
 import * as should from 'should';
 
 import { JsonDB, getEmptyFileContents, RecordId, Adapters } from '../src/json-db/json-db';
-
-async function promiseShouldThrow(cb: () => void | Promise<void>, msg?: string) {
-    try {
-        await cb();
-
-        should.throws(() => {
-            // empty here
-        }, msg);
-    }
-    catch (err: unknown) {
-        if (msg) {
-            if (err instanceof Error) {
-                should.equal(err.message, msg);
-            }
-            else {
-                throw new Error(`Error message required: ${msg}`);
-            }
-        }
-    }
-}
+import { promiseShouldThrow } from './test-utils';
 
 interface DbRes {
     users: {
