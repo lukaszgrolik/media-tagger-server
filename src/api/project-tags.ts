@@ -7,41 +7,24 @@ import * as express from 'express';
 import { Config } from '../config-validation';
 import * as utils from '../lib/utils';
 import { JsonDbData, JsonDbInstance, UniversalResBody } from '../types';
+import { createTags, CreateTagsReqBody } from '../actions/create-tags';
 
 export const projectTags = (app: express.Router) => {
-    type PostTagsReqBody = {
-        tags: {
-            name: string;
-            parentId?: null | number;
-            rank?: number;
-        }[];
-    };
-
-    app.post<{}, UniversalResBody, PostTagsReqBody>('/tags', async (req, res) => {
+    app.post<{}, UniversalResBody, CreateTagsReqBody>('/tags', async (req, res, next) => {
         const db = res.locals.db as JsonDbInstance;
 
-        // @todo validate name
-        // @todo validate parentId (tag must exist)
-        // @todo validate rank (ranks with array must be unique)
+        try {
+            const dbRes = await createTags({db, body: req.body});
 
-        // @todo adjust ranks
-
-        const data = await db.read();
-        const tagsCount = data.tags.length;
-        const tags = req.body.tags.map((t, i) => {
-            return {
-                name: t.name || '',
-                parentId: t.parentId || null,
-                // @todo allow custom ranks
-                rank: tagsCount + i
-            };
-        });
-
-        const dbRes = await db.insertMany('tags', tags);
-
-        res.json({
-            tags: dbRes,
-        });
+            res.json({
+                tags: dbRes,
+                // @todo handle new tags
+                // tags: ...
+            });
+        }
+        catch (err: unknown) {
+            next(err);
+        }
     });
 
     type PutTagsReqBody = {
@@ -65,6 +48,7 @@ export const projectTags = (app: express.Router) => {
                 const body = {
                     name: t.name,
                     parentId: t.parentId,
+                    // @todo update rank and adjust if changed parent
                 };
 
                 return tx.update('tags', t.id, body);

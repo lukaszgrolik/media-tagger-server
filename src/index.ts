@@ -95,6 +95,22 @@ app.use('/:projectName', async (req, res, next) => {
     next();
 }, projectRouter);
 
+const errorHandler: express.ErrorRequestHandler = (err, req, res, next) => {
+    if (err) {
+        console.error(err);
+
+        res.status(500);
+        res.json({
+            error: err.message,
+            message: err.stack,
+        });
+    }
+    else {
+        next();
+    }
+}
+app.use(errorHandler);
+
 app.listen(config.port, () => {
     console.log(`Example app listening at http://localhost:${config.port}`);
     console.log(`Projects: ${Object.keys(config.projects).join(', ')}`);

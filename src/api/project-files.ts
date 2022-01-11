@@ -10,6 +10,8 @@ import * as yaml from 'yaml';
 import { Config } from '../config-validation';
 import * as utils from '../lib/utils';
 import { JsonDbInstance, UniversalResBody } from '../types';
+import { UpdateFilesReqBody, updateFiles } from '../actions/update-files';
+import { PutFilesTagsReqBody as UpdateFilesTagsReqBody, updateFilesTags } from '../actions/update-files-tags';
 
 export const projectFiles = (app: express.Router, config: Config) => {
     app.get('/files', async (req, res) => {
@@ -96,128 +98,130 @@ export const projectFiles = (app: express.Router, config: Config) => {
         res.json(resData);
     });
 
-    type PutFilesReqBody = {
-        files: {
-            id: number;
-            description?: string;
-            tagsIds?: number[];
-            // @todo
-            // newTags?: {name: string; parentId?: number | null}[];
-        }[];
-    };
-
-    app.put<{}, UniversalResBody, PutFilesReqBody>('/files', async (req, res) => {
+    app.put<{}, UniversalResBody, UpdateFilesReqBody>('/files', async (req, res, next) => {
         const db = res.locals.db as JsonDbInstance;
 
-        // @todo validate files exist
-        // @todo validate all tags from req.body exist
-
-        const dbRes = await db.transaction(async tx => {
-            const reqs = req.body.files.map(f => {
-                return tx.update('files', f.id, f);
-            });
-
-            return Promise.all(reqs);
-        });
-
-
-        res.json({
-            files: dbRes,
-            // tags: ...
-        });
-    });
-
-    type PutFilesTagsAddReqBody = {
-        filesIds: number[];
-        tagsIds?: number[];
-        // @todo
-        // newTags?: { name: string; parentId?: number | null }[];
-    };
-
-    app.put<{}, UniversalResBody, PutFilesTagsAddReqBody>('/files/tags/add', async (req, res) => {
-        const db = res.locals.db as JsonDbInstance;
-
-        // @todo validate files exist
-        // @todo validate all tags from req.body exist
-
-        const {tagsIds} = req.body;
-
-        if (tagsIds && tagsIds.length > 0) {
-
-            const dataBefore = await db.read();
-            const dbRes = await db.transaction(async tx => {
-                const reqs = req.body.filesIds.map(fileId => {
-                    const file = dataBefore.files.find(f => f.id === fileId);
-                    if (!file) throw new Error(`unexpected error: file not found (id=${fileId})`);
-
-                    const updatedTagsIds = file.tagsIds.slice().concat(tagsIds);
-
-                    return tx.update('files', fileId, {
-                        tagsIds: updatedTagsIds,
-                    });
-                });
-
-                return Promise.all(reqs);
-            });
-
+        try {
+            const dbRes = await updateFiles({db, body: req.body});
 
             res.json({
                 files: dbRes,
+                // @todo handle new tags
                 // tags: ...
             });
         }
-        else {
-            res.json({
-                files: []
-            });
+        catch (err: unknown) {
+            next(err);
         }
     });
 
-    type PutFilesTagsRemoveReqBody = {
-        filesIds: number[];
-        tagsIds?: number[];
-        // @todo
-        // newTags?: { name: string; parentId?: number | null }[];
-    };
-
-    app.put<{}, UniversalResBody, PutFilesTagsRemoveReqBody>('/files/tags/remove', async (req, res) => {
+    app.put<{}, UniversalResBody, UpdateFilesTagsReqBody>('/files/tags', async (req, res, next) => {
         const db = res.locals.db as JsonDbInstance;
 
-        // @todo validate files exist
-        // @todo validate all tags from req.body exist
-
-        const { tagsIds } = req.body;
-
-        if (tagsIds && tagsIds.length > 0) {
-
-            const dataBefore = await db.read();
-            const dbRes = await db.transaction(async tx => {
-                const reqs = req.body.filesIds.map(fileId => {
-                    const file = dataBefore.files.find(f => f.id === fileId);
-                    if (!file) throw new Error(`unexpected error: file not found (id=${fileId})`);
-
-                    const updatedTagsIds = tagsIds.filter(tagId => {
-                        return tagsIds.includes(tagId) === false;
-                    });
-
-                    return tx.update('files', fileId, {
-                        tagsIds: updatedTagsIds,
-                    });
-                });
-
-                return Promise.all(reqs);
-            });
-
+        try {
+            const dbRes = await updateFilesTags({db, body: req.body});
 
             res.json({
-                files: dbRes,
-                // tags: ...
+                files: dbRes.files,
+                tags: dbRes.tags,
             });
         }
-        else {
-            res.json({
-                files: []
-            });
+        catch (err: unknown) {
+            next(err);
         }
     });
+
+    // type PutFilesTagsAddReqBody = {
+    //     filesIds: number[];
+    //     tagsIds?: number[];
+    //     // @todo
+    //     // newTags?: { name: string; parentId?: number | null }[];
+    // };
+
+    // app.put<{}, UniversalResBody, PutFilesTagsAddReqBody>('/files/tags/add', async (req, res) => {
+    //     const db = res.locals.db as JsonDbInstance;
+
+    //     // @todo validate files exist
+    //     // @todo validate all tags from req.body exist
+
+    //     const {tagsIds} = req.body;
+
+    //     if (tagsIds && tagsIds.length > 0) {
+
+    //         const dataBefore = await db.read();
+    //         const dbRes = await db.transaction(async tx => {
+    //             const reqs = req.body.filesIds.map(fileId => {
+    //                 const file = dataBefore.files.find(f => f.id === fileId);
+    //                 if (!file) throw new Error(`unexpected error: file not found (id=${fileId})`);
+
+    //                 const updatedTagsIds = file.tagsIds.slice().concat(tagsIds);
+
+    //                 return tx.update('files', fileId, {
+    //                     tagsIds: updatedTagsIds,
+    //                 });
+    //             });
+
+    //             return Promise.all(reqs);
+    //         });
+
+
+    //         res.json({
+    //             files: dbRes,
+    //             // tags: ...
+    //         });
+    //     }
+    //     else {
+    //         res.json({
+    //             files: []
+    //         });
+    //     }
+    // });
+
+    // type PutFilesTagsRemoveReqBody = {
+    //     filesIds: number[];
+    //     tagsIds?: number[];
+    //     // @todo
+    //     // newTags?: { name: string; parentId?: number | null }[];
+    // };
+
+    // app.put<{}, UniversalResBody, PutFilesTagsRemoveReqBody>('/files/tags/remove', async (req, res) => {
+    //     const db = res.locals.db as JsonDbInstance;
+
+    //     // @todo validate files exist
+    //     // @todo validate all tags from req.body exist
+
+    //     const { tagsIds } = req.body;
+
+    //     if (tagsIds && tagsIds.length > 0) {
+
+    //         const dataBefore = await db.read();
+    //         const dbRes = await db.transaction(async tx => {
+    //             const reqs = req.body.filesIds.map(fileId => {
+    //                 const file = dataBefore.files.find(f => f.id === fileId);
+    //                 if (!file) throw new Error(`unexpected error: file not found (id=${fileId})`);
+
+    //                 const updatedTagsIds = tagsIds.filter(tagId => {
+    //                     return tagsIds.includes(tagId) === false;
+    //                 });
+
+    //                 return tx.update('files', fileId, {
+    //                     tagsIds: updatedTagsIds,
+    //                 });
+    //             });
+
+    //             return Promise.all(reqs);
+    //         });
+
+
+    //         res.json({
+    //             files: dbRes,
+    //             // tags: ...
+    //         });
+    //     }
+    //     else {
+    //         res.json({
+    //             files: []
+    //         });
+    //     }
+    // });
 }
