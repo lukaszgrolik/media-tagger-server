@@ -2,6 +2,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import 'mocha';
 import * as should from 'should';
+
 import { updateFilesTags } from '../update-files-tags';
 import { JsonDbData, JsonDbInstance } from '../../types';
 import { Adapters, getEmptyFileContents, JsonDB } from '../../json-db/json-db';

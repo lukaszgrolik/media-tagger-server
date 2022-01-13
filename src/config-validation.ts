@@ -1,9 +1,11 @@
 import * as path from 'path';
+import { convertPath } from './lib/utils';
 
 export type ConfigProject = {
     path: string;
     disk?: boolean;
     db: string;
+    postersOutput: string;
     thumbnailsOutput: string;
 }
 
@@ -19,15 +21,34 @@ export class Config {
     }
 
     getMediaFolderPath(projectName: string) {
-        return path.resolve(__dirname, this.projects[projectName].path);
+        return path.resolve(this.projects[projectName].path);
+    }
+
+    getPostersFolderPath(projectName: string) {
+        return path.resolve(this.projects[projectName].postersOutput);
     }
 
     getThumbnailsFolderPath(projectName: string) {
-        return path.resolve(__dirname, this.projects[projectName].thumbnailsOutput);
+        return path.resolve(this.projects[projectName].thumbnailsOutput);
     }
 
     getDbPath(projectName: string) {
-        return path.resolve(__dirname, this.projects[projectName].db);
+        return path.resolve(this.projects[projectName].db);
+    }
+
+    getMediaAbsPath(projectName: string, filePath: string) {
+        return path.join(this.getMediaFolderPath(projectName), filePath)
+    }
+
+    getPosterAbsPath(projectName: string, filePath: string) {
+        return path.join(this.getPostersFolderPath(projectName), filePath);
+    }
+
+    getPosterRelPath(projectName: string, filePath: string) {
+        const postersFolderPath = this.getPostersFolderPath(projectName);
+        const relPath = convertPath(filePath.replace(postersFolderPath, ''));
+
+        return `${relPath[0] === '/' ? '' : '/'}${relPath}`;
     }
 }
 

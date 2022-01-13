@@ -8,6 +8,9 @@ export type UpdateFilesReqBody = {
         tagsIds?: number[];
         // @todo
         // newTags?: {name: string; parentId?: number | null}[];
+        meta?: {
+            poster?: string;
+        };
     }[];
 };
 
@@ -16,7 +19,21 @@ type Opts = {
     body: UpdateFilesReqBody;
 };
 
+const validateAllowedKeys = (obj: { [key: string]: any }, allowed: string[]) => {
+    Object.keys(obj).forEach(key => {
+        if (allowed.includes(key) === false) {
+            throw new Error(`unexpected key: ${key}`);
+        }
+    });
+};
+
 export const updateFiles = async (opts: Opts): Promise<FileResBody[]> => {
+    validateAllowedKeys(opts.body, ['files'])
+    opts.body.files.forEach(file => {
+        validateAllowedKeys(file, ['id', 'path', 'description', 'tagsIds', 'meta']);
+        if (file.meta) validateAllowedKeys(file.meta, ['poster']);
+    });
+
     // validate body contains either id or path
     opts.body.files.forEach(body => {
         if (!body.id && !body.path) {
@@ -55,23 +72,24 @@ export const updateFiles = async (opts: Opts): Promise<FileResBody[]> => {
         const dataBeforeB = await tx.read();
         const reqs = opts.body.files.map(body => {
             // validate files exist
-            const found = dataBeforeB.files.find(f => {
+            const foundFile = dataBeforeB.files.find(f => {
                 if (body.id) return f.id === body.id;
                 if (body.path) return f.path === body.path;
                 return undefined;
             });
 
             // only possible when id given (not path)
-            if (!found) throw new Error(`file not found (id=${body.id})`);
+            if (!foundFile) throw new Error(`file not found (id=${body.id})`);
 
-            // @todo validate tags exist
+            // validate tags exist
             body.tagsIds?.forEach(tagId => {
-                const found = dataBeforeB.tags.find(t => t.id === tagId);
+                const foundTag = dataBeforeB.tags.find(t => t.id === tagId);
 
-                if (!found) throw new Error(`tag not found (id=${tagId})`);
+                if (!foundTag) throw new Error(`tag not found (id=${tagId})`);
             });
 
-            return tx.update('files', found.id, body);
+            // overwriteObjectValues=false for the meta object
+            return tx.update('files', foundFile.id, body, {overwriteObjectValues: false});
         });
 
         return Promise.all(reqs);

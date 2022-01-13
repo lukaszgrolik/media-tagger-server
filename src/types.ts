@@ -9,6 +9,9 @@ export type DbFileBody = {
     path: string;
     description: string;
     tagsIds: number[];
+    meta?: {
+        poster?: string;
+    };
 };
 
 export type DbTagBody = {
@@ -41,6 +44,9 @@ export type FileResBody = {
     path?: string;
     description?: string;
     tagsIds?: number[];
+    meta?: {
+        poster?: string;
+    };
 };
 
 export type UniversalResBody = {

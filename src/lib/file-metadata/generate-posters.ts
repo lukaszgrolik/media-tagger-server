@@ -1,0 +1,162 @@
+import * as path from 'path';
+import * as fs from 'fs';
+import * as fsExtra from 'fs-extra';
+import 'mocha';
+import * as sharp from 'sharp';
+
+// var ffmpeg = require('fluent-ffmpeg');
+import * as ffmpeg from 'fluent-ffmpeg';
+import { systemPath, SystemPath } from '../system-path';
+
+type FileError = { path: string; error: Error };
+type FileSucceeded = { src: string; dest: string };
+
+interface GeneratePostersOpts {
+    files: {
+        src: SystemPath;
+        destDir: SystemPath;
+        // sizes: number[];
+    }[];
+    onFileProcessed?: (
+        err: FileError | undefined,
+        file: FileSucceeded | undefined,
+        progress: {count: number; progress: number; date: string}
+    ) => void;
+    // onFileProcessed?: (info: { src: SystemPath; dest: SystemPath; count: number; progress: number }) => void;
+    // onFileError?: (info: FailedOp) => void;
+}
+
+interface GeneratePostersResult {
+    failed: FileError[];
+    succeeded: FileSucceeded[];
+}
+
+interface FailedOp {
+    src: SystemPath;
+    destDir: SystemPath;
+    error: Error;
+}
+
+export async function generatePosters(opts: GeneratePostersOpts): Promise<GeneratePostersResult> {
+    // validate opts
+    opts.files.forEach(file => {
+        if (['mp4', 'webm'].includes(file.src.extLast.toLowerCase()) === false) {
+            throw new Error(`invalid source file path - mp4 or webm file required ("${file.src.raw}" given)`);
+        }
+
+        if (!file.destDir) {
+            throw new Error(`invalid destination dir path`);
+        }
+    });
+
+    let processedCount = 0;
+    const failed: FileError[] = [];
+    const succeeded: FileSucceeded[] = [];
+
+    // create sub-directories
+    {
+        const dirs = new Set<string>();
+        opts.files.forEach(f => {
+            dirs.add(f.destDir.raw);
+        });
+
+        const mkdirPromises = [...dirs].map(dir => {
+            return fsExtra.mkdirp(dir);
+        });
+
+        await Promise.all(mkdirPromises);
+    }
+
+    await Promise.all(
+        opts.files.map(async file => {
+            let error: FileError | undefined = undefined;
+            let fileRes: FileSucceeded | undefined = undefined;
+
+            let destFile: SystemPath | undefined = undefined;
+
+            try {
+                destFile = await generatePoster({
+                    src: file.src,
+                    destDir: file.destDir,
+                });
+
+                fileRes = {
+                    src: file.src.raw,
+                    dest: destFile.raw,
+                };
+
+                succeeded.push(fileRes);
+            }
+            catch (err) {
+                error = {
+                    path: file.src.raw,
+                    error: err,
+                };
+
+                failed.push(error);
+            }
+
+            processedCount += 1;
+            const progress = processedCount / opts.files.length;
+
+            if (opts.onFileProcessed) {
+                opts.onFileProcessed(error, fileRes, {
+                    count: processedCount,
+                    progress,
+                    date: new Date().toISOString(),
+                });
+            }
+        })
+    );
+
+    return {
+        succeeded,
+        failed,
+    };
+}
+
+async function generatePoster(opts: { src: SystemPath; destDir: SystemPath }): Promise<SystemPath> {
+    try {
+        // will throw if file not found
+        await fs.promises.access(opts.src.raw);
+    }
+    catch (err) {
+        throw new Error(`file not found: "${opts.src.raw}"`);
+    }
+
+    // here it throws cryptic error later in ffmpeg call if all the folders are not created beforehand but one at the time
+    // // ensure output folder exists
+    // await fsExtra.mkdirp(opts.destDir.folder);
+
+    await new Promise((resolve, reject) => {
+        ffmpeg({
+            source: opts.src.raw,
+        })
+            .takeScreenshots({
+                timemarks: [0],
+                folder: opts.destDir.raw,
+                // filename: '%b_poster.png'
+                filename: '%b.png',
+            })
+            .on('error', err => {
+                reject(err);
+            })
+            .on('end', () => {
+                resolve(null);
+            });
+    });
+
+    // ffmpeg outputs png file
+    const posterPath = `${opts.destDir.path}/${opts.src.fileExtPartial}.png`;
+
+    const dest = systemPath(path.join(opts.destDir.path, `${opts.src.fileExtPartial}_poster.jpg`));
+
+    await sharp(posterPath)
+        .jpeg()
+        .toFile(dest.path);
+
+
+    await fs.promises.unlink(posterPath);
+
+    return dest;
+}

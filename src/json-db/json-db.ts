@@ -368,7 +368,12 @@ export class JsonDB<
     //     return x;
     // }
 
-    private async updateOp<C extends keyof T>(collName: C, id: RecordId, body: Partial<Omit<T[C], keyof CommonFields>>): Promise<T[C]> {
+    private async updateOp<C extends keyof T>(
+        collName: C,
+        id: RecordId,
+        body: Partial<Omit<T[C], keyof CommonFields>>,
+        opOpts: { overwriteObjectValues: boolean }
+    ): Promise<T[C]> {
         this.preValidateBody(body);
 
         if (this.opts.hooks && this.opts.hooks[collName]) {
@@ -388,16 +393,32 @@ export class JsonDB<
 
         const updatedAt = this.getDateString();
 
-        Object.assign(record, { updatedAt }, body);
+        if (opOpts.overwriteObjectValues) {
+            Object.assign(record, { updatedAt }, body);
+        }
+        else {
+            record.updatedAt = updatedAt;
 
-        // await this.saveData(fileContent)
+            const updateObj = (objA: {}, objB: {}) => {
+                Object.entries(objB).forEach(([key, val]) => {
+                    if (val instanceof Object && val instanceof Array === false) {
+                        if (key in objA === false) {
+                            (objA as any)[key] = {};
+                        }
+
+                        updateObj((objA as any)[key], val)
+                    }
+                    else {
+
+                        (objA as any)[key] = val;
+                    }
+                });
+            };
+
+            updateObj(record, body);
+        }
+
         await this.saveData(fileContent);
-
-        // await new Promise((res) => {
-        //   setTimeout(() => {
-        //     res()
-        //   }, 1000)
-        // })
 
         if (this.opts.hooks && this.opts.hooks[collName]) {
             const collHooks = this.opts.hooks[collName];
@@ -405,19 +426,16 @@ export class JsonDB<
         }
 
         return record;
-        // res(record)
-        // }
-
-        // return this.schedule(update)
-
-        // this.testIO = new Promise()
-
-        // return this.testIO
     }
 
-    async update<C extends keyof T>(collName: C, id: RecordId, body: Partial<Omit<T[C], keyof CommonFields>>): Promise<T[C]> {
+    async update<C extends keyof T>(
+        collName: C,
+        id: RecordId,
+        body: Partial<Omit<T[C], keyof CommonFields>>,
+        opOpts: { overwriteObjectValues: boolean } = { overwriteObjectValues: true }
+    ): Promise<T[C]> {
         return this.writeOpsQueue.enqueue(() => {
-            return this.updateOp(collName, id, body);
+            return this.updateOp(collName, id, body, opOpts);
         });
     }
 

@@ -3,9 +3,11 @@ projects:
   project_name_1:
     path: /path/to/project-1/files
     db: /path/to/project-1/db/file
+    postersOutput: /path/to/posters/folder
     thumbnailsOuput: /path/to/thumbnails/folder
   project_name_2:
     path: /path/to/project-2/files
     disk: true # set to true if on Windows path is at the root, e.g. "Z:/"
     db: /path/to/project-2/db/file
+    postersOutput: /path/to/posters/folder
     thumbnailsOuput: /path/to/thumbnails/folder

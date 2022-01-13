@@ -20,6 +20,14 @@ interface DbRes {
         updatedAt: string;
         name: string;
         tagsIds: RecordId[];
+        foo?: {
+            a?: string;
+            b?: string;
+            c?: {
+                x?: string;
+                y?: string;
+            };
+        }
     };
     tags: {
         id: RecordId;
@@ -557,23 +565,87 @@ describe('JsonDB', () => {
         it('updates timestamp', async () => {
             const res1 = await jsonDB.insert('tags', { name: 'tag', parentId: null });
 
-            return new Promise((res) => {
+            return new Promise((res, rej) => {
                 setTimeout(async () => {
-                    const res2 = await jsonDB.update('tags', 1, { name: 'tag updated' });
+                    try {
 
-                    should.equal(res1.createdAt === res2.createdAt, true);
-                    should.equal(res1.updatedAt === res2.updatedAt, false);
+                        const res2 = await jsonDB.update('tags', 1, { name: 'tag updated' });
 
-                    res();
+                        should.equal(res1.createdAt === res2.createdAt, true);
+                        should.equal(res1.updatedAt === res2.updatedAt, false);
+
+                        res();
+                    }
+                    catch (err) {
+                        rej(err);
+                    }
                 }, 10);
             });
         });
 
+        // @todo should not throw but ignore?
         it('ignores undefineds in body', async () => {
             await jsonDB.insert('projects', { name: 'p1', tagsIds: [] });
 
             await promiseShouldThrow(async () => {
                 await jsonDB.update('projects', 1, {name: undefined});
+            });
+        });
+
+        describe('opts.overwriteObjectValues', () => {
+            it('(set to true) overwrites object values', async () => {
+                await jsonDB.insert('projects', { name: 'p1', tagsIds: [], foo: {a: 'a', b: 'b'} });
+                await jsonDB.update('projects', 1, { name: 'p1 updated', foo: {a: 'a2'} }, {overwriteObjectValues: true});
+
+                const data = await jsonDB.read();
+
+                should(data.projects.length).equal(1);
+                should(data.projects[0].name).equal('p1 updated');
+                should(data.projects[0].foo).deepEqual({a: 'a2'});
+            });
+
+            it('overwrites object values by default', async () => {
+                await jsonDB.insert('projects', { name: 'p1', tagsIds: [], foo: { a: 'a', b: 'b' } });
+                await jsonDB.update('projects', 1, { name: 'p1 updated', foo: { a: 'a2' } });
+
+                const data = await jsonDB.read();
+
+                should(data.projects.length).equal(1);
+                should(data.projects[0].name).equal('p1 updated');
+                should(data.projects[0].foo).deepEqual({ a: 'a2' });
+            });
+
+            it('(set to false) assigns present object fields', async () => {
+                await jsonDB.insert('projects', { name: 'p1', tagsIds: [], foo: { a: 'a', b: 'b' } });
+                await jsonDB.update('projects', 1, { name: 'p1 updated', foo: { a: 'a2' } }, {overwriteObjectValues: false});
+
+                const data = await jsonDB.read();
+
+                should(data.projects.length).equal(1);
+                should(data.projects[0].name).equal('p1 updated');
+                should(data.projects[0].foo).deepEqual({ a: 'a2', b: 'b' });
+            });
+
+            it('(set to false) creates object if does not exist', async () => {
+                await jsonDB.insert('projects', { name: 'p1', tagsIds: []});
+                await jsonDB.update('projects', 1, { name: 'p1 updated', foo: { a: 'a' } }, { overwriteObjectValues: false });
+
+                const data = await jsonDB.read();
+
+                should(data.projects.length).equal(1);
+                should(data.projects[0].name).equal('p1 updated');
+                should(data.projects[0].foo).deepEqual({ a: 'a' });
+            });
+
+            it('(set to false) assigns present object fields recursively', async () => {
+                await jsonDB.insert('projects', { name: 'p1', tagsIds: [], foo: { a: 'a', b: 'b', c: {x: 'x', y: 'y'} } });
+                await jsonDB.update('projects', 1, { name: 'p1 updated', foo: { a: 'a2', c: {y: 'y2'} } }, { overwriteObjectValues: false });
+
+                const data = await jsonDB.read();
+
+                should(data.projects.length).equal(1);
+                should(data.projects[0].name).equal('p1 updated');
+                should(data.projects[0].foo).deepEqual({ a: 'a2', b: 'b', c: {x: 'x', y: 'y2'} });
             });
         });
     });

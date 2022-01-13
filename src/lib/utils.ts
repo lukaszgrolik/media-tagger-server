@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs';
+import * as fsExtra from 'fs-extra';
 import * as glob from 'glob';
 
 export const getDirectories = async (source: string) => {
@@ -13,6 +14,8 @@ export const getDirectories = async (source: string) => {
 export const convertPath = (str: string) => str.replace(/\\/g, '/');
 
 export const searchGlob = (globPath: string): Promise<string[]> => {
+    globPath = convertPath(globPath);
+
     return new Promise((res, rej) => {
 
         glob(globPath, { strict: true }, (err, files) => {
@@ -41,3 +44,13 @@ export const searchGlobDisk = async (rootPath: string, fileGlob: string) => {
     const filesResults = await Promise.all(promises);
     return filesResults.flat();
 };
+
+export async function removeDirContents(dirPath: string) {
+    // const files = await fs.promises.readdir(dirPath)
+    // const promises = files.map(file => {
+    //     return fs.promises.unlink(path.join(dirPath, file));
+    // });
+
+    // return Promise.all(promises);
+    await fsExtra.emptyDir(dirPath);
+}

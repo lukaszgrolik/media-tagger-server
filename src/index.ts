@@ -39,6 +39,7 @@ app.use(express.json());
 
 Object.keys(config.projects).forEach(projectName => {
     app.use(`/${projectName}/assets`, express.static(config.getMediaFolderPath(projectName)));
+    app.use(`/${projectName}/posters`, express.static(config.getPostersFolderPath(projectName)));
     app.use(`/${projectName}/thumbnails`, express.static(config.getThumbnailsFolderPath(projectName)));
 });
 
