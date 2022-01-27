@@ -21,12 +21,19 @@ export type DbTagBody = {
     name: string;
     parentId: number | null;
     rank: number;
+    color?: string;
 };
 
 export type JsonDbData = {
     files: DbFileBody;
     tags: DbTagBody;
 };
+
+//
+//
+//
+//
+//
 
 export type TagResBody = {
     id: number;
@@ -35,6 +42,7 @@ export type TagResBody = {
     name?: string;
     parentId?: null | number;
     rank?: number;
+    color?: string;
 };
 
 export type FileResBody = {

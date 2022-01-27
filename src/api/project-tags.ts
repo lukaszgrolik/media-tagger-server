@@ -33,6 +33,7 @@ export const projectTags = (app: express.Router) => {
             name?: string;
             parentId?: null | number;
             rank?: number;
+            color?: string;
         }[];
     };
 
@@ -49,6 +50,7 @@ export const projectTags = (app: express.Router) => {
                     name: t.name,
                     parentId: t.parentId,
                     // @todo update rank and adjust if changed parent
+                    color: t.color,
                 };
 
                 return tx.update('tags', t.id, body);
