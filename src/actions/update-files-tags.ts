@@ -1,7 +1,7 @@
 import { DbFileBody, DbTagBody, FileResBody, JsonDbInstance } from "../types";
 import { createTags } from "./create-tags";
 
-export type PutFilesTagsReqBody = {
+export type UpdateFilesTagsReqBody = {
     ids?: number[];
     filePaths?: string[];
     addedTagsIds?: number[];
@@ -11,7 +11,7 @@ export type PutFilesTagsReqBody = {
 
 type Opts = {
     db: JsonDbInstance;
-    body: PutFilesTagsReqBody;
+    body: UpdateFilesTagsReqBody;
 };
 
 export const updateFilesTags = async (opts: Opts): Promise<{tags: DbTagBody[]; files: DbFileBody[]}> => {
