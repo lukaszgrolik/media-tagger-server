@@ -21,7 +21,7 @@ interface GeneratePostersOpts {
         err: FileError | undefined,
         file: FileSucceeded | undefined,
         progress: {count: number; progress: number; date: string}
-    ) => void;
+    ) => void | Promise<void>;
     // onFileProcessed?: (info: { src: SystemPath; dest: SystemPath; count: number; progress: number }) => void;
     // onFileError?: (info: FailedOp) => void;
 }
@@ -100,7 +100,7 @@ export async function generatePosters(opts: GeneratePostersOpts): Promise<Genera
             const progress = processedCount / opts.files.length;
 
             if (opts.onFileProcessed) {
-                opts.onFileProcessed(error, fileRes, {
+                await opts.onFileProcessed(error, fileRes, {
                     count: processedCount,
                     progress,
                     date: new Date().toISOString(),

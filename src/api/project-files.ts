@@ -153,7 +153,7 @@ export const projectFiles = (app: express.Router, config: Config) => {
 
             generatePosters({
                 files,
-                onFileProcessed: (err, file, progress) => {
+                onFileProcessed: async (err, file, progress) => {
                     posterJob.progress = progress;
 
                     if (err) {
@@ -162,7 +162,7 @@ export const projectFiles = (app: express.Router, config: Config) => {
                     else if (file) {
                         posterJob.succeeded.push(file);
 
-                        updateFiles({
+                        await updateFiles({
                             db,
                             body: {
                                 files: [
