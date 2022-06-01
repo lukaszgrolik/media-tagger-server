@@ -11,12 +11,14 @@ import { systemPath, SystemPath } from '../system-path';
 type FileError = { path: string; error: Error };
 type FileSucceeded = { src: string; dest: string };
 
+type GeneratePostersOptsFile = {
+    src: SystemPath;
+    destDir: SystemPath;
+    // sizes: number[];
+};
+
 interface GeneratePostersOpts {
-    files: {
-        src: SystemPath;
-        destDir: SystemPath;
-        // sizes: number[];
-    }[];
+    files: GeneratePostersOptsFile[];
     onFileProcessed?: (
         err: FileError | undefined,
         file: FileSucceeded | undefined,
@@ -67,47 +69,57 @@ export async function generatePosters(opts: GeneratePostersOpts): Promise<Genera
         await Promise.all(mkdirPromises);
     }
 
-    await Promise.all(
-        opts.files.map(async file => {
-            let error: FileError | undefined = undefined;
-            let fileRes: FileSucceeded | undefined = undefined;
+    const genPoster = async (file: GeneratePostersOptsFile) => {
+        let error: FileError | undefined = undefined;
+        let fileRes: FileSucceeded | undefined = undefined;
 
-            let destFile: SystemPath | undefined = undefined;
+        let destFile: SystemPath | undefined = undefined;
 
-            try {
-                destFile = await generatePoster({
-                    src: file.src,
-                    destDir: file.destDir,
-                });
+        try {
+            destFile = await generatePoster({
+                src: file.src,
+                destDir: file.destDir,
+            });
 
-                fileRes = {
-                    src: file.src.raw,
-                    dest: destFile.raw,
-                };
+            fileRes = {
+                src: file.src.raw,
+                dest: destFile.raw,
+            };
 
-                succeeded.push(fileRes);
-            }
-            catch (err) {
-                error = {
-                    path: file.src.raw,
-                    error: err,
-                };
+            succeeded.push(fileRes);
+        }
+        catch (err) {
+            error = {
+                path: file.src.raw,
+                error: err,
+            };
 
-                failed.push(error);
-            }
+            failed.push(error);
+        }
 
-            processedCount += 1;
-            const progress = processedCount / opts.files.length;
+        processedCount += 1;
+        const progress = processedCount / opts.files.length;
 
-            if (opts.onFileProcessed) {
-                await opts.onFileProcessed(error, fileRes, {
-                    count: processedCount,
-                    progress,
-                    date: new Date().toISOString(),
-                });
-            }
-        })
-    );
+        if (opts.onFileProcessed) {
+            await opts.onFileProcessed(error, fileRes, {
+                count: processedCount,
+                progress,
+                date: new Date().toISOString(),
+            });
+        }
+    };
+
+    //
+
+    // process fully in parallel (strains server and creates errors)
+    // await Promise.all(opts.files.map(genPoster));
+
+    // process in sequence
+    for (const file of opts.files) {
+        await genPoster(file);
+    }
+
+    // @todo process in parallel with chunks - e.g. 8 videos in parallel
 
     return {
         succeeded,
@@ -154,7 +166,6 @@ async function generatePoster(opts: { src: SystemPath; destDir: SystemPath }): P
     await sharp(posterPath)
         .jpeg()
         .toFile(dest.path);
-
 
     await fs.promises.unlink(posterPath);
 
