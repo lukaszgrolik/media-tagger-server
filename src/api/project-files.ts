@@ -119,6 +119,27 @@ export const projectFiles = (app: express.Router, config: Config) => {
         posterJobsStore.removeFinishedJobs();
     });
 
+    app.post<{}, Actions.FilesMetaStatResBody, Actions.FilesMetaStatReqBody>('/files/meta/stat', async (req, res, next) => {
+        const db = res.locals.db as JsonDbInstance;
+        const projectName = res.locals.projectName as string;
+
+        try {
+            const data = await Actions.fetchMetaStat({
+                db,
+                config,
+                projectName,
+                body: req.body,
+            });
+
+            res.json(data);
+        }
+        catch (err: unknown) {
+            next(err);
+        }
+    });
+
+    // '/files/meta/sharp'
+
     // type PutFilesTagsAddReqBody = {
     //     filesIds: number[];
     //     tagsIds?: number[];

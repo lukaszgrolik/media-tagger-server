@@ -11,6 +11,15 @@ export type DbFileBody = {
     tagsIds: number[];
     meta?: {
         poster?: string;
+        mtime?: string;
+        fileSize?: number;
+        // fileSize: number;
+        // displaySize: undefined | [number, number];
+        // poster: undefined | null | string;
+        // thumbnails: undefined | {
+        //     path: string;
+        //     size: [number, number];
+        // }[];
     };
 };
 
@@ -54,6 +63,8 @@ export type FileResBody = {
     tagsIds?: number[];
     meta?: {
         poster?: string;
+        mtime?: string;
+        fileSize?: number;
     };
 };
 
