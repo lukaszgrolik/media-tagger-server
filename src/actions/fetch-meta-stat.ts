@@ -46,9 +46,17 @@ export const fetchMetaStat = async (opts: Opts): Promise<FilesMetaStatResBody> =
         })
     }
 
+    console.log('JOB "fetch-meta-stat" started');
+    const filesCount = opts.body.filePaths.length;
+    let i = 0;
     for (const filePath of opts.body.filePaths) {
+        i += 1;
+
         await updateMetaStat(filePath);
+        console.log(`progress: ${i}/${filesCount}`)
     }
+
+    console.log('JOB "fetch-meta-stat" finished');
 
     return {success: true};
 };
