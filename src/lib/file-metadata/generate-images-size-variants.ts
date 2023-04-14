@@ -1,6 +1,9 @@
 import * as path from 'path';
 import * as fs from 'fs';
+import * as fsExtra from 'fs-extra';
 import * as sharp from 'sharp';
+
+import * as utils from '../utils';
 import { systemPath, SystemPath } from '../system-path';
 
 // type DestFilenameFn = (name: string, size: [number, number], ext: string, fullName: string) => string;
@@ -18,7 +21,7 @@ type GenerateSizeVariantFile = {
 export interface GenerateSizeVariantsOpts {
     files: GenerateSizeVariantFile[];
     // onFileProcessed?: (info: { src: SystemPath; sizes: { dest: SystemPath; size: [number, number] }[]; count: number; progress: number }) => void;
-    onFileProcessed?: (info: { src: SystemPath; sizes: { path: SystemPath; size: number }[]; count: number; progress: number }) => void;
+    onFileSucceeded?: (info: { src: SystemPath; sizes: { path: SystemPath; size: number }[]; count: number; progress: number }) => void;
     onFileError?: (info: { src: SystemPath; destDir: SystemPath; error: Error }) => void;
 }
 
@@ -31,7 +34,7 @@ interface GeneratedSizeVariantsProcessedFile {
 }
 
 interface GenerateSizeVariantsResult {
-    processed: GeneratedSizeVariantsProcessedFile[];
+    succeeded: GeneratedSizeVariantsProcessedFile[];
     failed: FailedOp[];
 }
 
@@ -43,10 +46,12 @@ interface FailedOp {
 
 export async function generateImagesSizeVariants(opts: GenerateSizeVariantsOpts): Promise<GenerateSizeVariantsResult> {
     let processedCount = 0;
-    const processed: GeneratedSizeVariantsProcessedFile[] = [];
+    const succeeded: GeneratedSizeVariantsProcessedFile[] = [];
     const failed: FailedOp[] = [];
 
-    const promises = opts.files.map(async file => {
+    await utils.createMissingSubDirectories(opts.files.map(f => f.destDir.raw));
+
+    async function processFile(file: GenerateSizeVariantFile) {
         let destFiles: GenerateImageSizeVariantsResult[] | undefined = undefined;
 
         try {
@@ -65,7 +70,7 @@ export async function generateImagesSizeVariants(opts: GenerateSizeVariantsOpts)
             });
 
             if (opts.onFileError) {
-                opts.onFileError({
+                await opts.onFileError({
                     src: file.src,
                     destDir: file.destDir,
                     error: err,
@@ -79,15 +84,15 @@ export async function generateImagesSizeVariants(opts: GenerateSizeVariantsOpts)
 
             // const sizes = destFiles.map(f => f.size);
 
-            processed.push({
+            succeeded.push({
                 src: file.src,
                 sizes: destFiles
             });
 
             const progress = processedCount / opts.files.length;
 
-            if (opts.onFileProcessed) {
-                opts.onFileProcessed({
+            if (opts.onFileSucceeded) {
+                await opts.onFileSucceeded({
                     src: file.src,
                     sizes: destFiles,
                     count: processedCount,
@@ -95,12 +100,16 @@ export async function generateImagesSizeVariants(opts: GenerateSizeVariantsOpts)
                 });
             }
         }
-    });
+    }
 
-    await Promise.all(promises);
+    // await Promise.all(promises);
+
+    for (const file of opts.files) {
+        await processFile(file);
+    }
 
     return {
-        processed,
+        succeeded,
         failed,
     };
 }
@@ -153,7 +162,7 @@ async function generateImageSizeVariants(opts: GenerateImageSizeVariantsOpts): P
         return inputH > size.maxHeight;
     });
 
-    const promises = validImages.map(async size => {
+    async function processFile(size: {maxHeight: number}) {
         // const ratio = inputW / inputH;
         // const w = ratio * size.maxHeight;
         // const h = size.maxHeight;
@@ -161,16 +170,26 @@ async function generateImageSizeVariants(opts: GenerateImageSizeVariantsOpts): P
         // const dest = path.join(opts.destDir.path, outputFileName);
         const dest = systemPath(path.join(opts.destDir.path, `${opts.src.fileExtPartial}_${size.maxHeight}.${opts.src.extLast}`));
 
+        // NOTE: sharp fails silently if the destination folder doesn't exist
         await sharp(opts.src.path)
-            .resize({height: size.maxHeight})
-            .toFile(dest.path);
+        .resize({height: size.maxHeight})
+        .toFile(dest.path);
 
         return {
             path: dest,
             size: size.maxHeight
         };
-    });
+    }
 
     // @todo promise-parallel-max or enqueue
-    return Promise.all(promises);
+    // return Promise.all(promises);
+
+    const result: GenerateImageSizeVariantsResult[] = [];
+    for (const file of validImages) {
+        const res = await processFile(file);
+
+        result.push(res);
+    }
+
+    return result;
 }

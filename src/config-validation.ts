@@ -44,11 +44,26 @@ export class Config {
         return path.join(this.getPostersFolderPath(projectName), filePath);
     }
 
-    getPosterRelPath(projectName: string, filePath: string) {
-        const postersFolderPath = this.getPostersFolderPath(projectName);
-        const relPath = convertPath(filePath.replace(postersFolderPath, ''));
+    getThumbnailAbsPath(projectName: string, filePath: string) {
+        return path.join(this.getThumbnailsFolderPath(projectName), filePath);
+    }
+
+    private getRelPath(filePath: string, folderPath: string) {
+        const relPath = convertPath(filePath.replace(folderPath, ''));
 
         return `${relPath[0] === '/' ? '' : '/'}${relPath}`;
+    }
+
+    getPosterRelPath(projectName: string, filePath: string) {
+        const postersFolderPath = this.getPostersFolderPath(projectName);
+
+        return this.getRelPath(filePath, postersFolderPath);
+    }
+
+    getThumbnailRelPath(projectName: string, filePath: string) {
+        const thumbnailsFolderPath = this.getThumbnailsFolderPath(projectName);
+
+        return this.getRelPath(filePath, thumbnailsFolderPath);
     }
 }
 

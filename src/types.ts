@@ -11,6 +11,7 @@ export type DbFileBody = {
     tagsIds: number[];
     meta?: {
         poster?: string;
+        thumbnails?: {[height: string]: string};
         mtime?: string;
         fileSize?: number;
         // fileSize: number;
@@ -63,6 +64,7 @@ export type FileResBody = {
     tagsIds?: number[];
     meta?: {
         poster?: string;
+        thumbnails?: {[height: string]: string};
         mtime?: string;
         fileSize?: number;
     };

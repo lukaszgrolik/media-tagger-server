@@ -6,7 +6,6 @@ import { systemPath } from '../lib/system-path';
 import { JsonDbInstance } from '../types';
 import { updateFiles } from './update-files';
 import * as FileMetadata from '../lib/file-metadata/file-metadata';
-import { PosterJob, PosterJobsStore } from '../lib/poster-jobs-store/poster-jobs-store';
 
 export type FilesMetaStatReqBody = {
     filePaths: string[];

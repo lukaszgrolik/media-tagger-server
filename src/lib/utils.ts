@@ -32,6 +32,7 @@ export const searchGlob = (globPath: string): Promise<string[]> => {
         });
     });
 };
+
 // fixes issue when no files found on "Z:/"
 export const searchGlobDisk = async (rootPath: string, fileGlob: string) => {
     const dirs = await getDirectories(rootPath);
@@ -53,4 +54,12 @@ export async function removeDirContents(dirPath: string) {
 
     // return Promise.all(promises);
     await fsExtra.emptyDir(dirPath);
+}
+
+export async function createMissingSubDirectories(paths: string[]) {
+    const dirs = [...new Set(paths)];
+
+    await Promise.all(
+        dirs.map(dir => fsExtra.mkdirp(dir))
+    );
 }

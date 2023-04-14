@@ -10,12 +10,9 @@ import * as utils from '../lib/utils';
 import { JsonDbInstance, UniversalResBody } from '../types';
 import * as Actions from '../actions/actions';
 import { systemPath } from '../lib/system-path';
-import { PosterJobsStore } from '../lib/poster-jobs-store/poster-jobs-store';
 
 export const projectFiles = (app: express.Router, config: Config) => {
     const diskFilesPerProject = new Map<string, Actions.DiskFileData[]>();
-
-    const posterJobsStore = new PosterJobsStore();
 
     app.get<{}, Actions.DiskFileData[]>('/files', async (req, res, next) => {
         const projectName = res.locals.projectName as string;
@@ -70,25 +67,34 @@ export const projectFiles = (app: express.Router, config: Config) => {
         }
     });
 
+    //
+    //
+    //
+    //
+    //
+
     type FilesPostersGenerateResBody = {
-        posterJobId: number;
+        jobId: number;
     };
 
     app.post<{}, FilesPostersGenerateResBody, Actions.FilesPostersGenerateReqBody>('/files/posters/generate', async (req, res, next) => {
+        const jobService = res.locals.jobService;
         const db = res.locals.db as JsonDbInstance;
         const projectName = res.locals.projectName as string;
 
+        // @todo validate req.body - filePaths
+
         try {
-            const posterJob = await Actions.generatePosters({
+            const job = await Actions.generatePosters({
                 db,
                 config,
                 projectName,
-                posterJobsStore,
+                jobService,
                 body: req.body,
             });
 
             res.json({
-                posterJobId: posterJob.id,
+                jobId: job.id,
             });
         }
         catch (err: unknown) {
@@ -96,28 +102,46 @@ export const projectFiles = (app: express.Router, config: Config) => {
         }
     });
 
-    type FilesPostersStatusResBody = {
-        jobs: {
-            id: number;
-            progress: {count: number; progress: number};
-            failed: {
-                path: string;
-                error: Error;
-            }[];
-            succeeded: {
-                src: string;
-                dest: string;
-            }[];
-        }[];
+    //
+    //
+    //
+    //
+    //
+
+    type FilesThumbnailsGenerateResBody = {
+        jobId: number;
     };
 
-    app.get<{}, FilesPostersStatusResBody>('/files/posters/status', (req, res) => {
-        res.json({
-            jobs: posterJobsStore.jobs
-        });
+    app.post<{}, FilesThumbnailsGenerateResBody, Actions.FilesThumbnailsGenerateReqBody>('/files/thumbnails/generate', async (req, res, next) => {
+        const jobService = res.locals.jobService;
+        const db = res.locals.db as JsonDbInstance;
+        const projectName = res.locals.projectName as string;
 
-        posterJobsStore.removeFinishedJobs();
+        // @todo validate req.body - filePaths, sizes
+
+        try {
+            const job = await Actions.generateThumbnails({
+                db,
+                config,
+                projectName,
+                jobService,
+                body: req.body,
+            });
+
+            res.json({
+                jobId: job.id,
+            });
+        }
+        catch (err: unknown) {
+            next(err);
+        }
     });
+
+    //
+    //
+    //
+    //
+    //
 
     app.post<{}, Actions.FilesMetaStatResBody, Actions.FilesMetaStatReqBody>('/files/meta/stat', async (req, res, next) => {
         const db = res.locals.db as JsonDbInstance;

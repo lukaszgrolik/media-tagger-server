@@ -26,11 +26,11 @@ async function generateThumbnails(body: {paths: string[]; sizes: number[]}) {
     const res = await generateImagesSizeVariants(opts);
 
     should(res.failed.length).equal(0);
-    should(res.processed.length).equal(body.paths.length);
+    should(res.succeeded.length).equal(body.paths.length);
 
     for (const path of body.paths) {
         const i = body.paths.indexOf(path);
-        const processedSizes = res.processed[i].sizes;
+        const processedSizes = res.succeeded[i].sizes;
 
         const metadataOrigin = await sharp(opts.files[i].src.path).metadata();
         const metadataOriginHeight = metadataOrigin.height || 0;

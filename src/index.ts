@@ -12,6 +12,8 @@ import { projectFiles } from './api/project-files';
 import { Adapters, JsonDB } from './json-db/json-db';
 import { projectTags } from './api/project-tags';
 import { JsonDbData, JsonDbInstance } from './types';
+import { JobService } from './lib/job-service';
+import { projectJobs } from './api/project-jobs';
 
 const configStr = fs.readFileSync('./config.yaml', 'utf8')
 const configVal = yaml.parse(configStr);
@@ -69,6 +71,7 @@ const projectRouter = express.Router()
 //     next();
 // });
 
+projectJobs(projectRouter, config);
 projectFiles(projectRouter, config);
 projectTags(projectRouter);
 
@@ -91,6 +94,9 @@ app.use('/:projectName', async (req, res, next) => {
 
     res.locals.projectName = req.params.projectName;
 
+    const jobService = new JobService();
+
+    res.locals.jobService = jobService;
     res.locals.db = db;
 
     next();

@@ -10,6 +10,7 @@ export type UpdateFilesReqBody = {
         // newTags?: {name: string; parentId?: number | null}[];
         meta?: {
             poster?: string;
+            thumbnails?: {[height: string]: string};
             mtime?: string;
             fileSize?: number;
         };
@@ -33,7 +34,7 @@ export const updateFiles = async (opts: Opts): Promise<FileResBody[]> => {
     validateAllowedKeys(opts.body, ['files'])
     opts.body.files.forEach(file => {
         validateAllowedKeys(file, ['id', 'path', 'description', 'tagsIds', 'meta']);
-        if (file.meta) validateAllowedKeys(file.meta, ['mtime', 'fileSize', 'poster']);
+        if (file.meta) validateAllowedKeys(file.meta, ['mtime', 'fileSize', 'poster', 'thumbnails']);
     });
 
     // validate body contains either id or path

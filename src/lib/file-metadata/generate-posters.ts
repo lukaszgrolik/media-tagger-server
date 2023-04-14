@@ -6,6 +6,7 @@ import * as sharp from 'sharp';
 
 // var ffmpeg = require('fluent-ffmpeg');
 import * as ffmpeg from 'fluent-ffmpeg';
+import * as utils from '../utils';
 import { systemPath, SystemPath } from '../system-path';
 
 type FileError = { path: string; error: Error };
@@ -55,19 +56,7 @@ export async function generatePosters(opts: GeneratePostersOpts): Promise<Genera
     const failed: FileError[] = [];
     const succeeded: FileSucceeded[] = [];
 
-    // create sub-directories
-    {
-        const dirs = new Set<string>();
-        opts.files.forEach(f => {
-            dirs.add(f.destDir.raw);
-        });
-
-        const mkdirPromises = [...dirs].map(dir => {
-            return fsExtra.mkdirp(dir);
-        });
-
-        await Promise.all(mkdirPromises);
-    }
+    await utils.createMissingSubDirectories(opts.files.map(f => f.destDir.raw));
 
     const genPoster = async (file: GeneratePostersOptsFile) => {
         let error: FileError | undefined = undefined;
