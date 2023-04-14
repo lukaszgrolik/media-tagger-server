@@ -3,6 +3,8 @@
     "dev": "ts-node-dev ./src/index.ts",
     "test": "npx mocha ./test/**/*.test.ts --require ts-node/register",
     "test:actions": "npx mocha ./src/actions/test/**/*.test.ts --require ts-node/register",
+    "test:gen-posters": "npx mocha ./src/lib/file-metadata/test/generate-posters.test.ts --require ts-node/register",
+    "test:gen-thumbnails": "npx mocha ./src/lib/file-metadata/test/generate-images-size-variants.test.ts --require ts-node/register",
     "gen-thumb": "ts-node ./src/generate-thumbnails/generate-thumbnails.ts"
   },
   "dependencies": {
