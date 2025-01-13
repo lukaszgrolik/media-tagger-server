@@ -90,6 +90,14 @@ app.use('/:projectName', async (req, res, next) => {
     // const dbPath = config.getDbPath(req.params.projectName)
     const db = dbs[req.params.projectName];
 
+    if (!db) {
+        res.json({
+            error: `Database not found for project "${req.params.projectName}"`,
+        });
+
+        return;
+    }
+
     // @todo throw if db does not found (invalid projectName)
 
     res.locals.projectName = req.params.projectName;

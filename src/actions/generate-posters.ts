@@ -41,10 +41,15 @@ export const generatePosters = async (opts: Opts): Promise<GenerateVideoPostersJ
         await FileMetadata.generatePosters({
             files,
             onFileProcessed: async (err, file, progress) => {
+
                 if (err) {
+                    console.log('poster gen failed', err.path, err.error);
+
                     posterJob.markFileFailed(err);
                 }
                 else if (file) {
+                    console.log('poster generated', file.dest);
+
                     await updateFiles({
                         db: opts.db,
                         body: {
