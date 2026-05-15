@@ -2,9 +2,9 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { EventEmitter } from 'events';
 import 'mocha';
-import * as should from 'should';
+import should = require('should');
 
-import { JsonDB, getEmptyFileContents, RecordId, Adapters } from '../src/json-db/json-db';
+import { SqliteStore, getEmptyFileContents, RecordId, Adapters } from '../src/persistence/sqlite-store';
 import { promiseShouldThrow } from './test-utils';
 
 interface DbRes {
@@ -57,32 +57,30 @@ function getEmptyDbContentRaw() {
 //     },
 // }
 
-const DB_FILE_PATH = path.resolve(process.cwd(), 'json-db-test.json');
+const DB_FILE_PATH = path.resolve(process.cwd(), 'sqlite-store-test.sqlite');
 
 function createDbFile() {
-    const dataStr = getEmptyDbContentRaw();
-    fs.writeFileSync(DB_FILE_PATH, dataStr);
-
-    return new JsonDB<DbRes>({
+    return new SqliteStore<DbRes>({
         adapter: new Adapters.File({
             filePath: DB_FILE_PATH,
         }),
+        collections: ['users', 'projects', 'tags'],
         // findById: (coll, rec, id) => {
         //     // rec.
         // },
     });
 }
 
-const jsonDB = createDbFile();
+const store = createDbFile();
 
-describe('JsonDB', () => {
+describe('SqliteStore', () => {
     beforeEach(async () => {
-        await jsonDB.clear();
+        await store.clear();
     });
 
     after(async () => {
         // remove file
-
+        store.close();
         await fs.promises.unlink(DB_FILE_PATH);
     });
 
@@ -103,7 +101,7 @@ describe('JsonDB', () => {
         //     const data = getEmptyFileContents(['users', 'projects', 'tags']);
         //     fs.writeFileSync(DB_FILE_PATH, '');
 
-        //     new JsonDB<DbRes>({
+        //     new SqliteStore<DbRes>({
         //         filePath: DB_FILE_PATH,
         //         // findById: (coll, rec, id) => {
         //         //     // rec.
@@ -118,21 +116,21 @@ describe('JsonDB', () => {
         it('invokes beforeUpdate hook');
 
         it('invokes beforeDelete hook', async () => {
-            // jsonDB.validate.onInsert((collName, body) => {
+            // store.validate.onInsert((collName, body) => {
             //     if (collName === 'projects') {
             //         body.name.length > 30;
             //     }
             // });
 
-            // jsonDB.validate.onUpdate('tags', (id, body) => {
+            // store.validate.onUpdate('tags', (id, body) => {
             //     // body.
             // });
 
-            // jsonDB.validate.onDelete('tags', id => {
+            // store.validate.onDelete('tags', id => {
             //
             // });
 
-            // jsonDB.hooks.beforeUpdate(body => {
+            // store.hooks.beforeUpdate(body => {
             //     // removes records that reference deleted record
             // });
 
@@ -140,14 +138,14 @@ describe('JsonDB', () => {
             const memAdapter = new Adapters.Memory({
                 db: getEmptyDbContentRaw(),
             });
-            const jsonDB = new JsonDB<DbRes>({
+            const store = new SqliteStore<DbRes>({
                 adapter: memAdapter,
                 hooks: {
                     tags: {
                         beforeDelete: async id => {
                             // removes records that reference deleted record
 
-                            const { projects, tags } = await jsonDB.read()
+                            const { projects, tags } = await store.read()
                             const tagChildren = tags.filter(t => t.parentId === id);
 
                             if (tagChildren.length > 0) {
@@ -168,18 +166,18 @@ describe('JsonDB', () => {
                 },
             });
 
-            const res_t1 = await jsonDB.insert('tags', {name: 't1', parentId: null});
-            const res_t2 = await jsonDB.insert('tags', { name: 't1.1', parentId: res_t1.id });
+            const res_t1 = await store.insert('tags', {name: 't1', parentId: null});
+            const res_t2 = await store.insert('tags', { name: 't1.1', parentId: res_t1.id });
 
             await promiseShouldThrow(async () => {
-                await jsonDB.delete('tags', 1);
+                await store.delete('tags', 1);
             }, 'cannot delete tag that has children');
 
-            await jsonDB.delete('tags', res_t2.id);
-            await jsonDB.insert('projects', {name: 'p1', tagsIds: [res_t1.id]});
+            await store.delete('tags', res_t2.id);
+            await store.insert('projects', {name: 'p1', tagsIds: [res_t1.id]});
 
             await promiseShouldThrow(async () => {
-                await jsonDB.delete('tags', 1);
+                await store.delete('tags', 1);
             }, 'cannot delete tag that is assigned to a project');
         });
 
@@ -191,18 +189,18 @@ describe('JsonDB', () => {
     });
 
     it('loads content', async () => {
-        const dataBefore = await jsonDB.read();
+        const dataBefore = await store.read();
 
         should.deepEqual(Object.keys(dataBefore), ['users', 'projects', 'tags']);
         should.equal(dataBefore.users.length, 0);
         should.equal(dataBefore.projects.length, 0);
         should.equal(dataBefore.tags.length, 0);
 
-        await jsonDB.insert('users', {email: 'aaa@bbb.com'});
-        await jsonDB.insert('projects', {name: 'p1', tagsIds: []});
-        await jsonDB.insert('tags', {name: '', parentId: null});
+        await store.insert('users', {email: 'aaa@bbb.com'});
+        await store.insert('projects', {name: 'p1', tagsIds: []});
+        await store.insert('tags', {name: '', parentId: null});
 
-        const dataAfter = await jsonDB.read();
+        const dataAfter = await store.read();
 
         should.deepEqual(Object.keys(dataBefore), ['users', 'projects', 'tags']);
         should.equal(dataAfter.users.length, 1);
@@ -212,14 +210,14 @@ describe('JsonDB', () => {
 
     describe('modification', () => {
         let memAdapter: Adapters.Memory;
-        let jsonDB: JsonDB<DbRes>;
+        let store: SqliteStore<DbRes>;
         const ops: string[] = [];
 
         beforeEach(() => {
             memAdapter = new Adapters.Memory({
                 db: getEmptyDbContentRaw(),
             });
-            jsonDB = new JsonDB<DbRes>({
+            store = new SqliteStore<DbRes>({
                 adapter: memAdapter,
                 hooks: {
                     projects: {
@@ -254,22 +252,22 @@ describe('JsonDB', () => {
             await Promise.all([
                 new Promise(async res => {
                     memAdapter.delay = 50;
-                    await jsonDB.insert('projects', {name: 'p1', tagsIds: []});
+                    await store.insert('projects', {name: 'p1', tagsIds: []});
                     res(null);
                 }),
                 new Promise(async res => {
                     memAdapter.delay = 25;
-                    await jsonDB.insert('projects', {name: 'p2', tagsIds: []});
+                    await store.insert('projects', {name: 'p2', tagsIds: []});
                     res(null);
                 }),
                 new Promise(async res => {
                     memAdapter.delay = 0;
-                    await jsonDB.insert('projects', {name: 'p3', tagsIds: []});
+                    await store.insert('projects', {name: 'p3', tagsIds: []});
                     res(null);
                 }),
             ]);
 
-            const data = await jsonDB.read();
+            const data = await store.read();
 
             should.deepEqual(data.projects.map(p => p.name), ['p1', 'p2', 'p3']);
             should.deepEqual(ops, [
@@ -280,27 +278,27 @@ describe('JsonDB', () => {
         });
 
         it('update actions wait for other modify actions to finish', async () => {
-            const project = await jsonDB.insert('projects', { name: 'p1', tagsIds: [] });
+            const project = await store.insert('projects', { name: 'p1', tagsIds: [] });
 
             await Promise.all([
                 new Promise(async res => {
                     memAdapter.delay = 50;
-                    await jsonDB.update('projects', project.id, {name: 'p1 update1', tagsIds: []});
+                    await store.update('projects', project.id, {name: 'p1 update1', tagsIds: []});
                     res(null);
                 }),
                 new Promise(async res => {
                     memAdapter.delay = 25;
-                    await jsonDB.update('projects', project.id, {name: 'p1 update2', tagsIds: []});
+                    await store.update('projects', project.id, {name: 'p1 update2', tagsIds: []});
                     res(null);
                 }),
                 new Promise(async res => {
                     memAdapter.delay = 0;
-                    await jsonDB.update('projects', project.id, {name: 'p1 update3', tagsIds: []});
+                    await store.update('projects', project.id, {name: 'p1 update3', tagsIds: []});
                     res(null);
                 }),
             ]);
 
-            const data = await jsonDB.read();
+            const data = await store.read();
 
             should.equal(data.projects[0].name, 'p1 update3');
             should.deepEqual(ops, [
@@ -313,29 +311,29 @@ describe('JsonDB', () => {
         });
 
         it('delete actions wait for other modify actions to finish', async () => {
-            const p1 = await jsonDB.insert('projects', { name: 'p1', tagsIds: [] });
-            const p2 = await jsonDB.insert('projects', { name: 'p2', tagsIds: [] });
-            const p3 = await jsonDB.insert('projects', { name: 'p3', tagsIds: [] });
+            const p1 = await store.insert('projects', { name: 'p1', tagsIds: [] });
+            const p2 = await store.insert('projects', { name: 'p2', tagsIds: [] });
+            const p3 = await store.insert('projects', { name: 'p3', tagsIds: [] });
 
             await Promise.all([
                 new Promise(async res => {
                     memAdapter.delay = 50;
-                    await jsonDB.delete('projects', p1.id);
+                    await store.delete('projects', p1.id);
                     res(null);
                 }),
                 new Promise(async res => {
                     memAdapter.delay = 25;
-                    await jsonDB.delete('projects', p2.id);
+                    await store.delete('projects', p2.id);
                     res(null);
                 }),
                 new Promise(async res => {
                     memAdapter.delay = 0;
-                    await jsonDB.delete('projects', p3.id);
+                    await store.delete('projects', p3.id);
                     res(null);
                 }),
             ]);
 
-            const data = await jsonDB.read();
+            const data = await store.read();
 
             should.equal(data.projects.length, 0);
             should.deepEqual(ops, [
@@ -357,7 +355,7 @@ describe('JsonDB', () => {
             await Promise.all([
                 new Promise(async res => {
                     memAdapter.delay = 50;
-                    await jsonDB.transaction(async tx => {
+                    await store.transaction(async tx => {
                         p1 = await tx.insert('projects', { name: 'p1', tagsIds: [] });
                         await tx.update('projects', p1.id, { name: 'p1 update1', tagsIds: [] });
                     });
@@ -365,7 +363,7 @@ describe('JsonDB', () => {
                 }),
                 new Promise(async res => {
                     memAdapter.delay = 25;
-                    await jsonDB.transaction(async tx => {
+                    await store.transaction(async tx => {
                         p2 = await tx.insert('projects', { name: 'p2', tagsIds: [] });
                         p3 = await tx.insert('projects', { name: 'p3', tagsIds: [] });
                         await tx.delete('projects', p1.id);
@@ -374,7 +372,7 @@ describe('JsonDB', () => {
                 }),
                 new Promise(async res => {
                     memAdapter.delay = 0;
-                    await jsonDB.transaction(async tx => {
+                    await store.transaction(async tx => {
                         await tx.update('projects', p2.id, { name: 'p2 update1' });
                         await tx.update('projects', p3.id, { name: 'p3 update1' });
                     });
@@ -382,7 +380,7 @@ describe('JsonDB', () => {
                 }),
             ]);
 
-            const data = await jsonDB.read();
+            const data = await store.read();
 
             should.equal(data.projects.length, 2);
             should.deepEqual(ops, [
@@ -400,16 +398,16 @@ describe('JsonDB', () => {
 
         it('various modify actions execute one at a time', async () => {
             await Promise.all([
-                jsonDB.insert('projects', { name: 'p1', tagsIds: [] }),
-                jsonDB.update('projects', 1, { name: 'p1 update1', tagsIds: [] }),
-                jsonDB.insert('projects', { name: 'p2', tagsIds: [] }),
-                jsonDB.insert('projects', { name: 'p3', tagsIds: [] }),
-                jsonDB.delete('projects', 1),
-                jsonDB.update('projects', 2, { name: 'p2 update1' }),
-                jsonDB.update('projects', 3, { name: 'p3 update1' }),
+                store.insert('projects', { name: 'p1', tagsIds: [] }),
+                store.update('projects', 1, { name: 'p1 update1', tagsIds: [] }),
+                store.insert('projects', { name: 'p2', tagsIds: [] }),
+                store.insert('projects', { name: 'p3', tagsIds: [] }),
+                store.delete('projects', 1),
+                store.update('projects', 2, { name: 'p2 update1' }),
+                store.update('projects', 3, { name: 'p3 update1' }),
             ]);
 
-            const data = await jsonDB.read();
+            const data = await store.read();
 
             should.equal(data.projects.length, 2);
             should.deepEqual(ops, [
@@ -429,30 +427,30 @@ describe('JsonDB', () => {
     describe('creating record', () => {
         // it('throws when payload contains id field', () => {
         //     await promiseShouldThrow(() => {
-        //         await jsonDB.insert('projects', { id: 123, name: 'test 1' });
+        //         await store.insert('projects', { id: 123, name: 'test 1' });
         //     });
         // });
 
         // it('throws when payload contains timestamp fields', () => {
         //     await promiseShouldThrow(() => {
-        //         await jsonDB.insert('projects', { createdAt: '', name: 'test 1' });
-        //         await jsonDB.insert('projects', { updatedAt: '', name: 'test 1' });
+        //         await store.insert('projects', { createdAt: '', name: 'test 1' });
+        //         await store.insert('projects', { updatedAt: '', name: 'test 1' });
         //     });
         // });
 
         it('throws when references id of non-existent record', async () => {
             await promiseShouldThrow(async () => {
-                await jsonDB.insert('tags', {name: 't1', parentId: 123});
+                await store.insert('tags', {name: 't1', parentId: 123});
             });
         });
 
         it('adds new record to db', async () => {
-            const data1 = await jsonDB.read();
+            const data1 = await store.read();
             should.equal(data1.projects.length, 0);
 
-            await jsonDB.insert('projects', { name: 'test 1', tagsIds: [] });
+            await store.insert('projects', { name: 'test 1', tagsIds: [] });
 
-            const data2 = await jsonDB.read();
+            const data2 = await store.read();
             should.equal(data2.projects.length, 1);
 
             const project = data2.projects[0];
@@ -463,9 +461,9 @@ describe('JsonDB', () => {
         });
 
         it('adds timestamps', async () => {
-            await jsonDB.insert('projects', { name: 'test 1', tagsIds: [] });
+            await store.insert('projects', { name: 'test 1', tagsIds: [] });
 
-            const data = await jsonDB.read();
+            const data = await store.read();
             const p1 = data.projects[0];
 
             should.equal(typeof p1.createdAt, 'string');
@@ -473,7 +471,7 @@ describe('JsonDB', () => {
         });
 
         it('returns newly created record', async () => {
-            const project = await jsonDB.insert('projects', { name: 'test 1', tagsIds: [] });
+            const project = await store.insert('projects', { name: 'test 1', tagsIds: [] });
 
             should.deepEqual(Object.keys(project), ['id', 'createdAt', 'updatedAt', 'name', 'tagsIds']);
             should.equal(project.id, 1);
@@ -481,9 +479,9 @@ describe('JsonDB', () => {
         });
 
         it('increases ID counter', async () => {
-            const p1 = await jsonDB.insert('projects', { name: 'test 1', tagsIds: [] });
-            const p2 = await jsonDB.insert('projects', { name: 'test 2', tagsIds: [] });
-            const t1 = await jsonDB.insert('tags', { name: 'tag 1', parentId: null });
+            const p1 = await store.insert('projects', { name: 'test 1', tagsIds: [] });
+            const p2 = await store.insert('projects', { name: 'test 2', tagsIds: [] });
+            const t1 = await store.insert('tags', { name: 'tag 1', parentId: null });
 
             should.equal(p1.id, 1);
             should.equal(p2.id, 2);
@@ -491,13 +489,13 @@ describe('JsonDB', () => {
         });
 
         // it('ignores undefineds in body', () => {
-        //     await jsonDB.insert('tags', { name: 'test 1 });
+        //     await store.insert('tags', { name: 'test 1 });
         // });
 
         // it('ignores undefineds in body', () => {
         //     await promiseShouldThrow(() => {
         //         // use "any" to force undefined
-        //         await jsonDB.insert('projects', { name: undefined as any, tagsIds: [] });
+        //         await store.insert('projects', { name: undefined as any, tagsIds: [] });
         //     });
         // });
     });
@@ -505,15 +503,15 @@ describe('JsonDB', () => {
     describe('updating record', () => {
         it('throws when id not found', async () => {
             await promiseShouldThrow(async () => {
-                await jsonDB.update('projects', 1, {});
+                await store.update('projects', 1, {});
             });
         });
 
         it('throws when references id of non-existent record', async () => {
             await promiseShouldThrow(async () => {
-                // jsonDB.update('projects', 1, {});
-                await jsonDB.insert('tags', { name: 't1', parentId: null });
-                await jsonDB.update('tags', 1, {parentId: 123});
+                // store.update('projects', 1, {});
+                await store.insert('tags', { name: 't1', parentId: null });
+                await store.update('tags', 1, {parentId: 123});
             });
         });
 
@@ -526,18 +524,18 @@ describe('JsonDB', () => {
         // });
 
         it('updates record in db', async () => {
-            await jsonDB.insert('projects', {name: 'p1', tagsIds: []});
-            await jsonDB.update('projects', 1, {name: 'p1 updated'});
+            await store.insert('projects', {name: 'p1', tagsIds: []});
+            await store.update('projects', 1, {name: 'p1 updated'});
 
-            const data = await jsonDB.read();
+            const data = await store.read();
 
             should.equal(data.projects.length, 1);
             should.equal(data.projects[0].name, 'p1 updated');
         });
 
         it('returns updated record', async () => {
-            await jsonDB.insert('projects', {name: 'p1', tagsIds: []});
-            const p1 = await jsonDB.update('projects', 1, {name: 'p1 updated'});
+            await store.insert('projects', {name: 'p1', tagsIds: []});
+            const p1 = await store.update('projects', 1, {name: 'p1 updated'});
 
             should.deepEqual(Object.keys(p1), ['id', 'createdAt', 'updatedAt', 'name', 'tagsIds']);
             should.equal(p1.id, 1);
@@ -547,15 +545,15 @@ describe('JsonDB', () => {
         });
 
         it('does not change fields not present in body', async () => {
-            await jsonDB.insert('tags', { name: 'tag 1', parentId: null });
-            await jsonDB.insert('tags', { name: 'tag 2', parentId: 1 });
+            await store.insert('tags', { name: 'tag 1', parentId: null });
+            await store.insert('tags', { name: 'tag 2', parentId: 1 });
 
-            const tagRes1 = await jsonDB.update('tags', 2, {name: 'tag 2 updated'});
+            const tagRes1 = await store.update('tags', 2, {name: 'tag 2 updated'});
 
             should.equal(tagRes1.name, 'tag 2 updated');
             should.equal(tagRes1.parentId, 1);
 
-            const tagRes2 = await jsonDB.update('tags', 2, {parentId: null});
+            const tagRes2 = await store.update('tags', 2, {parentId: null});
 
             should.equal(tagRes2.name, 'tag 2 updated');
             should.equal(tagRes2.parentId, null);
@@ -563,13 +561,13 @@ describe('JsonDB', () => {
         });
 
         it('updates timestamp', async () => {
-            const res1 = await jsonDB.insert('tags', { name: 'tag', parentId: null });
+            const res1 = await store.insert('tags', { name: 'tag', parentId: null });
 
             return new Promise((res, rej) => {
                 setTimeout(async () => {
                     try {
 
-                        const res2 = await jsonDB.update('tags', 1, { name: 'tag updated' });
+                        const res2 = await store.update('tags', 1, { name: 'tag updated' });
 
                         should.equal(res1.createdAt === res2.createdAt, true);
                         should.equal(res1.updatedAt === res2.updatedAt, false);
@@ -585,19 +583,19 @@ describe('JsonDB', () => {
 
         // @todo should not throw but ignore?
         it('ignores undefineds in body', async () => {
-            await jsonDB.insert('projects', { name: 'p1', tagsIds: [] });
+            await store.insert('projects', { name: 'p1', tagsIds: [] });
 
             await promiseShouldThrow(async () => {
-                await jsonDB.update('projects', 1, {name: undefined});
+                await store.update('projects', 1, {name: undefined});
             });
         });
 
         describe('opts.overwriteObjectValues', () => {
             it('(set to true) overwrites object values', async () => {
-                await jsonDB.insert('projects', { name: 'p1', tagsIds: [], foo: {a: 'a', b: 'b'} });
-                await jsonDB.update('projects', 1, { name: 'p1 updated', foo: {a: 'a2'} }, {overwriteObjectValues: true});
+                await store.insert('projects', { name: 'p1', tagsIds: [], foo: {a: 'a', b: 'b'} });
+                await store.update('projects', 1, { name: 'p1 updated', foo: {a: 'a2'} }, {overwriteObjectValues: true});
 
-                const data = await jsonDB.read();
+                const data = await store.read();
 
                 should(data.projects.length).equal(1);
                 should(data.projects[0].name).equal('p1 updated');
@@ -605,10 +603,10 @@ describe('JsonDB', () => {
             });
 
             it('overwrites object values by default', async () => {
-                await jsonDB.insert('projects', { name: 'p1', tagsIds: [], foo: { a: 'a', b: 'b' } });
-                await jsonDB.update('projects', 1, { name: 'p1 updated', foo: { a: 'a2' } });
+                await store.insert('projects', { name: 'p1', tagsIds: [], foo: { a: 'a', b: 'b' } });
+                await store.update('projects', 1, { name: 'p1 updated', foo: { a: 'a2' } });
 
-                const data = await jsonDB.read();
+                const data = await store.read();
 
                 should(data.projects.length).equal(1);
                 should(data.projects[0].name).equal('p1 updated');
@@ -616,10 +614,10 @@ describe('JsonDB', () => {
             });
 
             it('(set to false) assigns present object fields', async () => {
-                await jsonDB.insert('projects', { name: 'p1', tagsIds: [], foo: { a: 'a', b: 'b' } });
-                await jsonDB.update('projects', 1, { name: 'p1 updated', foo: { a: 'a2' } }, {overwriteObjectValues: false});
+                await store.insert('projects', { name: 'p1', tagsIds: [], foo: { a: 'a', b: 'b' } });
+                await store.update('projects', 1, { name: 'p1 updated', foo: { a: 'a2' } }, {overwriteObjectValues: false});
 
-                const data = await jsonDB.read();
+                const data = await store.read();
 
                 should(data.projects.length).equal(1);
                 should(data.projects[0].name).equal('p1 updated');
@@ -627,10 +625,10 @@ describe('JsonDB', () => {
             });
 
             it('(set to false) creates object if does not exist', async () => {
-                await jsonDB.insert('projects', { name: 'p1', tagsIds: []});
-                await jsonDB.update('projects', 1, { name: 'p1 updated', foo: { a: 'a' } }, { overwriteObjectValues: false });
+                await store.insert('projects', { name: 'p1', tagsIds: []});
+                await store.update('projects', 1, { name: 'p1 updated', foo: { a: 'a' } }, { overwriteObjectValues: false });
 
-                const data = await jsonDB.read();
+                const data = await store.read();
 
                 should(data.projects.length).equal(1);
                 should(data.projects[0].name).equal('p1 updated');
@@ -638,10 +636,10 @@ describe('JsonDB', () => {
             });
 
             it('(set to false) assigns present object fields recursively', async () => {
-                await jsonDB.insert('projects', { name: 'p1', tagsIds: [], foo: { a: 'a', b: 'b', c: {x: 'x', y: 'y'} } });
-                await jsonDB.update('projects', 1, { name: 'p1 updated', foo: { a: 'a2', c: {y: 'y2'} } }, { overwriteObjectValues: false });
+                await store.insert('projects', { name: 'p1', tagsIds: [], foo: { a: 'a', b: 'b', c: {x: 'x', y: 'y'} } });
+                await store.update('projects', 1, { name: 'p1 updated', foo: { a: 'a2', c: {y: 'y2'} } }, { overwriteObjectValues: false });
 
-                const data = await jsonDB.read();
+                const data = await store.read();
 
                 should(data.projects.length).equal(1);
                 should(data.projects[0].name).equal('p1 updated');
@@ -653,31 +651,31 @@ describe('JsonDB', () => {
     describe('deleting record', async () => {
         it('throws when id not found', async () => {
             await promiseShouldThrow(async () => {
-                await jsonDB.delete('projects', 1);
+                await store.delete('projects', 1);
             });
         });
 
         // it('throws when deleting record that is referenced elsewhere', () => {
         //     await promiseShouldThrow(() => {
-        //         // jsonDB.update('projects', 1, {});
-        //         await jsonDB.insert('tags', { name: 't1', parentId: null });
-        //         await jsonDB.insert('tags', { name: 't2', parentId: 1 });
-        //         await jsonDB.delete('tags', 1);
+        //         // store.update('projects', 1, {});
+        //         await store.insert('tags', { name: 't1', parentId: null });
+        //         await store.insert('tags', { name: 't2', parentId: 1 });
+        //         await store.delete('tags', 1);
         //     });
         // });
 
         it('removes record from db', async () => {
-            await jsonDB.insert('projects', { name: 'p1', tagsIds: [] });
-            await jsonDB.delete('projects', 1);
+            await store.insert('projects', { name: 'p1', tagsIds: [] });
+            await store.delete('projects', 1);
 
-            const data = await jsonDB.read();
+            const data = await store.read();
 
             should.equal(data.projects.length, 0);
         });
 
         it('returns deleted record', async () => {
-            await jsonDB.insert('projects', { name: 'p1', tagsIds: [] });
-            const project = await jsonDB.delete('projects', 1);
+            await store.insert('projects', { name: 'p1', tagsIds: [] });
+            const project = await store.delete('projects', 1);
 
             should.deepEqual(Object.keys(project), ['id', 'createdAt', 'updatedAt', 'name', 'tagsIds']);
             should.equal(project.id, 1);
@@ -689,13 +687,13 @@ describe('JsonDB', () => {
 
     describe('clearing data', () => {
         it('deletes all records from all collections', async () => {
-            await jsonDB.insert('users', { email: 'u1' });
-            await jsonDB.insert('projects', { name: 'p1', tagsIds: [] });
-            await jsonDB.insert('tags', { name: 't1', parentId: null });
+            await store.insert('users', { email: 'u1' });
+            await store.insert('projects', { name: 'p1', tagsIds: [] });
+            await store.insert('tags', { name: 't1', parentId: null });
 
-            await jsonDB.clear();
+            await store.clear();
 
-            const data = await jsonDB.read();
+            const data = await store.read();
 
             should.equal(data.users.length, 0);
             should.equal(data.projects.length, 0);
@@ -705,11 +703,11 @@ describe('JsonDB', () => {
 
     // describe('batch', () => {
     //     it('executes in sequence', async () => {
-    //         await jsonDB.insert('projects', {name: 'p1', tagsIds: []});
-    //         await jsonDB.insert('projects', {name: 'p2', tagsIds: []});
-    //         await jsonDB.insert('projects', {name: 'p3', tagsIds: []});
+    //         await store.insert('projects', {name: 'p1', tagsIds: []});
+    //         await store.insert('projects', {name: 'p2', tagsIds: []});
+    //         await store.insert('projects', {name: 'p3', tagsIds: []});
 
-    //         const batchRes = await jsonDB.batch([
+    //         const batchRes = await store.batch([
     //             {
     //                 type: 'insert',
     //                 collection: 'projects',
@@ -741,7 +739,7 @@ describe('JsonDB', () => {
 
     //         should.equal(batchRes.length, 5);
 
-    //         const data = await jsonDB.read();
+    //         const data = await store.read();
 
     //         should.equal(data.projects.length, 3);
     //         should.equal(data.projects[0].name, 'p1 updated');
@@ -758,7 +756,7 @@ describe('JsonDB', () => {
     describe('transactions', () => {
         describe('commit', () => {
             it('saves all insert, update and delete actions', async () => {
-                await jsonDB.transaction(async tx => {
+                await store.transaction(async tx => {
                     await tx.insert('projects', {name: 'p1', tagsIds: []});
                     await tx.insert('projects', {name: 'p2', tagsIds: []});
 
@@ -769,7 +767,7 @@ describe('JsonDB', () => {
                     await tx.delete('projects', 1);
                 });
 
-                const data = await jsonDB.read();
+                const data = await store.read();
 
                 should.equal(data.projects.length, 1);
                 should.equal(data.projects[0].id, 2);
@@ -777,9 +775,9 @@ describe('JsonDB', () => {
             });
 
             it('changes db within transaction context', async () => {
-                await jsonDB.insert('projects', { name: 'p0', tagsIds: [] });
+                await store.insert('projects', { name: 'p0', tagsIds: [] });
 
-                await jsonDB.transaction(async tx => {
+                await store.transaction(async tx => {
                     await tx.insert('projects', {name: 'p1', tagsIds: []});
                     await tx.insert('projects', {name: 'p2', tagsIds: []});
 
@@ -798,9 +796,9 @@ describe('JsonDB', () => {
             });
 
             it('does not change db outside transaction context', async () => {
-                await jsonDB.insert('projects', { name: 'p0', tagsIds: [] });
+                await store.insert('projects', { name: 'p0', tagsIds: [] });
 
-                await jsonDB.transaction(async tx => {
+                await store.transaction(async tx => {
                     await tx.insert('projects', {name: 'p1', tagsIds: []});
                     await tx.insert('projects', {name: 'p2', tagsIds: []});
 
@@ -810,7 +808,7 @@ describe('JsonDB', () => {
 
                     await tx.delete('projects', 1);
 
-                    const data = await jsonDB.read();
+                    const data = await store.read();
 
                     should.equal(data.projects.length, 1);
                     should.equal(data.projects[0].id, 1);
@@ -823,10 +821,10 @@ describe('JsonDB', () => {
             it('transactions wait for the current transaction to finish');
 
             it('throws an error from the transaction if any', async () => {
-                await jsonDB.insert('projects', { name: 'p0', tagsIds: [] });
+                await store.insert('projects', { name: 'p0', tagsIds: [] });
 
                 await promiseShouldThrow(async () => {
-                    await jsonDB.transaction(async tx => {
+                    await store.transaction(async tx => {
                         await tx.insert('projects', { name: 'p1', tagsIds: [] });
                         await tx.insert('projects', { name: 'p2', tagsIds: [] });
 
@@ -840,10 +838,10 @@ describe('JsonDB', () => {
             });
 
             it('reverts pre-transaction state in case of an error', async () => {
-                await jsonDB.insert('projects', { name: 'p0', tagsIds: [] });
+                await store.insert('projects', { name: 'p0', tagsIds: [] });
 
                 try {
-                    await jsonDB.transaction(async tx => {
+                    await store.transaction(async tx => {
                         await tx.insert('projects', {name: 'p1', tagsIds: []});
                         await tx.insert('projects', {name: 'p2', tagsIds: []});
 
@@ -858,7 +856,7 @@ describe('JsonDB', () => {
 
                 }
 
-                const data = await jsonDB.read();
+                const data = await store.read();
 
                 should.equal(data.projects.length, 1);
                 should.equal(data.projects[0].id, 1);
@@ -875,11 +873,11 @@ describe('JsonDB', () => {
 
     describe('id counter', () => {
         it('preserves id counter value after deleting a record', async () => {
-            await jsonDB.insert('projects', { name: 'p1', tagsIds: [] });
-            await jsonDB.delete('projects', 1);
-            const project = await jsonDB.insert('projects', { name: 'p2', tagsIds: [] });
+            await store.insert('projects', { name: 'p1', tagsIds: [] });
+            await store.delete('projects', 1);
+            const project = await store.insert('projects', { name: 'p2', tagsIds: [] });
 
-            const data = await jsonDB.read();
+            const data = await store.read();
             const dataProject = data.projects.find(p => p.id === 2);
 
             should.equal(project.id, 2);
@@ -898,7 +896,7 @@ describe('JsonDB', () => {
 
     describe('adapters', () => {
         describe('file', () => {
-            const jsonDb = new JsonDB({
+            const db = new SqliteStore({
                 adapter: new Adapters.File({
                     filePath: './db.test.json'
                 }),
@@ -916,7 +914,7 @@ describe('JsonDB', () => {
                 },
             }
 
-            const jsonDb = new JsonDB({
+            const db = new SqliteStore({
                 adapter: new Adapters.LocalStorage({
                     name: 'db.test',
                     localStorage: lsMock,
@@ -1044,3 +1042,4 @@ describe('JsonDB', () => {
 //     const uRes = store.update('b', 1, {});
 //     uRes.ble
 // }
+

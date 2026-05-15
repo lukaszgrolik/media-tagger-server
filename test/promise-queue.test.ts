@@ -1,7 +1,7 @@
 import 'mocha';
-import * as should from 'should';
+import should = require('should');
 
-import PromiseQueue from '../src/json-db/promise-queue';
+import PromiseQueue from '../src/persistence/promise-queue';
 
 class X {
     arr: number[] = [];
@@ -31,7 +31,6 @@ describe('PromiseQueue', () => {
     it('makes functions execute one after another', async () => {
         const x = new X();
         const pq = new PromiseQueue();
-
         await Promise.all(
             [
                 () => x.foo(1, 50),

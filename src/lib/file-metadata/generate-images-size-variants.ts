@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import * as fsExtra from 'fs-extra';
-import * as sharp from 'sharp';
+import sharp from 'sharp';
 
 import * as utils from '../utils';
 import { systemPath, SystemPath } from '../system-path';
@@ -66,14 +66,14 @@ export async function generateImagesSizeVariants(opts: GenerateSizeVariantsOpts)
             failed.push({
                 src: file.src,
                 destDir: file.destDir,
-                error: err,
+                error: err as Error,
             });
 
             if (opts.onFileError) {
                 await opts.onFileError({
                     src: file.src,
                     destDir: file.destDir,
-                    error: err,
+                    error: err as Error,
                 });
             }
         }

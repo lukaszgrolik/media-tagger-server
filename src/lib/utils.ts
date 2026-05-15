@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import * as fsExtra from 'fs-extra';
-import * as glob from 'glob';
+import {glob} from 'glob';
 
 export const getDirectories = async (source: string) => {
     const results = await fs.promises.readdir(source, { withFileTypes: true });
@@ -16,21 +16,7 @@ export const convertPath = (str: string) => str.replace(/\\/g, '/');
 export const searchGlob = (globPath: string): Promise<string[]> => {
     globPath = convertPath(globPath);
 
-    return new Promise((res, rej) => {
-
-        glob(globPath, { strict: true }, (err, files) => {
-            // files is an array of filenames.
-            // If the `nonull` option is set, and nothing
-            // was found, then files is ["**/*.js"]
-            // err is an error object or null.
-
-            if (err) {
-                rej(err);
-            }
-
-            res(files);
-        });
-    });
+    return glob(globPath);
 };
 
 // fixes issue when no files found on "Z:/"

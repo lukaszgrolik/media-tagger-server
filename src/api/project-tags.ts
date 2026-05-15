@@ -6,12 +6,12 @@ import * as express from 'express';
 
 import { Config } from '../config-validation';
 import * as utils from '../lib/utils';
-import { JsonDbData, JsonDbInstance, UniversalResBody } from '../types';
+import { DatabaseSchema, DatabaseInstance, UniversalResBody } from '../types';
 import { createTags, CreateTagsReqBody } from '../actions/create-tags';
 
 export const projectTags = (app: express.Router) => {
     app.post<{}, UniversalResBody, CreateTagsReqBody>('/tags', async (req, res, next) => {
-        const db = res.locals.db as JsonDbInstance;
+        const db = res.locals.db as DatabaseInstance;
 
         try {
             const dbRes = await createTags({db, body: req.body});
@@ -38,7 +38,7 @@ export const projectTags = (app: express.Router) => {
     };
 
     app.put<{}, UniversalResBody, PutTagsReqBody>('/tags', async (req, res) => {
-        const db = res.locals.db as JsonDbInstance;
+        const db = res.locals.db as DatabaseInstance;
 
         // @todo validate name
         // @todo validate parentId (tag must exist)
@@ -73,7 +73,7 @@ export const projectTags = (app: express.Router) => {
     };
 
     app.delete<{}, UniversalResBody, DeleteTagsReqBody>('/tags', async (req, res) => {
-        const db = res.locals.db as JsonDbInstance;
+        const db = res.locals.db as DatabaseInstance;
 
         // validate tags exist
 

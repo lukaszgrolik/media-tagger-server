@@ -1,11 +1,11 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import 'mocha';
-import * as should from 'should';
+import should = require('should');
 
 import { updateFilesTags } from '../update-files-tags';
-import { JsonDbData, JsonDbInstance } from '../../types';
-import { Adapters, getEmptyFileContents, JsonDB } from '../../json-db/json-db';
+import { DatabaseSchema, DatabaseInstance } from '../../types';
+import { Adapters, getEmptyFileContents, SqliteStore } from '../../persistence/sqlite-store';
 import { promiseShouldThrow } from '../../../test/test-utils';
 
 interface Db {
@@ -36,7 +36,7 @@ function getEmptyDbContentRaw() {
 }
 
 describe('actions/update-files-tags', () => {
-    const db = new JsonDB<JsonDbData>({
+    const db = new SqliteStore<DatabaseSchema>({
         adapter: new Adapters.Memory({
             db: getEmptyDbContentRaw(),
         }),

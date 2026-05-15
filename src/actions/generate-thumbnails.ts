@@ -1,6 +1,6 @@
 import { Config } from '../config-validation';
 import { systemPath } from '../lib/system-path';
-import { JsonDbInstance } from '../types';
+import { DatabaseInstance } from '../types';
 import { updateFiles } from './update-files';
 import * as FileMetadata from '../lib/file-metadata/file-metadata';
 import { GenerateImageThumbnailsJob, JobService } from '../lib/job-service';
@@ -11,7 +11,7 @@ export type FilesThumbnailsGenerateReqBody = {
 };
 
 type Opts = {
-    db: JsonDbInstance;
+    db: DatabaseInstance;
     config: Config;
     projectName: string;
     jobService: JobService;

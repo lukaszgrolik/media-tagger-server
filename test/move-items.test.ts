@@ -1,6 +1,6 @@
 import 'mocha';
-import * as should from 'should';
-import { Adapters, getEmptyFileContents, JsonDB, RecordId } from '../src/json-db/json-db';
+import should = require('should');
+import { Adapters, getEmptyFileContents, SqliteStore, RecordId } from '../src/persistence/sqlite-store';
 
 // function moveItem<T, S>(arr: T[], cb: (i: T) => S, items: S[], newIndex: number): T[] {
 type ReorderElementsResult<T> = { output: T[]; changes: [T, number][] };
@@ -250,7 +250,7 @@ describe('reorderRecords', () => {
                 }
             }
 
-            const db = new JsonDB<DbRes>({
+            const db = new SqliteStore<DbRes>({
                 adapter: new Adapters.Memory({
                     db: JSON.stringify(getEmptyFileContents(['tags'])),
                 }),
@@ -307,7 +307,7 @@ describe('reorderRecords', () => {
     //         }
     //     }
 
-    //     const db = new JsonDB<DbRes>({
+    //     const db = new SqliteStore<DbRes>({
     //         adapter: new Adapters.Memory({
     //             db: JSON.stringify(getEmptyFileContents(['tags'])),
     //         }),

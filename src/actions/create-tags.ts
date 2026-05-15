@@ -6,7 +6,7 @@ import * as express from 'express';
 
 import { Config } from '../config-validation';
 import * as utils from '../lib/utils';
-import { DbTagBody, JsonDbData, JsonDbInstance, TagResBody, UniversalResBody } from '../types';
+import { DbTagBody, DatabaseSchema, DatabaseInstance, TagResBody, UniversalResBody } from '../types';
 
 export type CreateTagsReqBody = {
     tags: {
@@ -17,7 +17,7 @@ export type CreateTagsReqBody = {
 };
 
 type Opts = {
-    db: JsonDbInstance;
+    db: DatabaseInstance;
     body: CreateTagsReqBody;
 };
 

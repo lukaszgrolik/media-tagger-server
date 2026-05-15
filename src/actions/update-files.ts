@@ -1,4 +1,4 @@
-import { FileResBody, JsonDbInstance } from "../types";
+import { FileResBody, DatabaseInstance } from "../types";
 
 export type UpdateFilesReqBody = {
     files: {
@@ -18,7 +18,7 @@ export type UpdateFilesReqBody = {
 };
 
 type Opts = {
-    db: JsonDbInstance;
+    db: DatabaseInstance;
     body: UpdateFilesReqBody;
 };
 

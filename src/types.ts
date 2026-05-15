@@ -1,6 +1,6 @@
-import { JsonDB } from "./json-db/json-db";
+import { SqliteStore } from './persistence/sqlite-store';
 
-export type JsonDbInstance = JsonDB<JsonDbData>;
+export type DatabaseInstance = SqliteStore<DatabaseSchema>;
 
 export type DbFileBody = {
     id: number;
@@ -34,7 +34,7 @@ export type DbTagBody = {
     color?: string;
 };
 
-export type JsonDbData = {
+export type DatabaseSchema = {
     files: DbFileBody;
     tags: DbTagBody;
 };

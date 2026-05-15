@@ -2,8 +2,8 @@
     "compilerOptions": {
         "allowUnreachableCode": false,
         "forceConsistentCasingInFileNames": true,
-        "module": "CommonJS",
-        "moduleResolution": "node",
+        "module": "nodenext",
+        "moduleResolution": "nodenext",
         "noFallthroughCasesInSwitch": true,
         "noImplicitAny": true,
         "noImplicitReturns": true,
@@ -23,9 +23,13 @@
             "node_modules/@types",
             "./@types"
         ],
+        "types": [
+            "node",
+            "mocha"
+        ],
         "skipLibCheck": true,
         "sourceMap": true,
-        "downlevelIteration": true,
+        // "downlevelIteration": true,
         "lib": [
             "ES2020",
         ]

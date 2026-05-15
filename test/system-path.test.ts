@@ -1,5 +1,5 @@
 import 'mocha';
-import * as should from 'should';
+import should = require('should');
 
 import { systemPath, SystemPath } from '../src/lib/system-path';
 
@@ -86,7 +86,7 @@ describe('SystemPath', () => {
         it(test.input, () => {
             const spath = systemPath(test.input);
 
-            should(spath).deepEqual(test.expected);
+            should({ ...spath }).deepEqual(test.expected);
         });
     }
 });

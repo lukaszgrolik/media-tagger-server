@@ -2,10 +2,10 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as fsExtra from 'fs-extra';
 import 'mocha';
-import * as sharp from 'sharp';
+import sharp from 'sharp';
 
 // var ffmpeg = require('fluent-ffmpeg');
-import * as ffmpeg from 'fluent-ffmpeg';
+import ffmpeg from 'fluent-ffmpeg';
 import * as utils from '../utils';
 import { systemPath, SystemPath } from '../system-path';
 
@@ -80,7 +80,7 @@ export async function generatePosters(opts: GeneratePostersOpts): Promise<Genera
         catch (err) {
             error = {
                 path: file.src.raw,
-                error: err,
+                error: err as Error,
             };
 
             failed.push(error);

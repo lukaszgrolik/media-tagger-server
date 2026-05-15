@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import 'mocha';
-import * as should from 'should';
+import should = require('should');
 import * as sharp from 'sharp';
 
 // var ffmpeg = require('fluent-ffmpeg');

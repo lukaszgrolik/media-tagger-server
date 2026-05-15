@@ -53,7 +53,7 @@ export const listDiskFiles = async (opts: Opts) => {
         let root = utils.convertPath(mediaFolderPath);
         if (root[root.length - 1] === '/') root = root.slice(0, -1);
 
-        return f.replace(root, '');
+        return utils.convertPath(f).replace(root, '');
     });
 
     // const promises = paths.map(async relPath => {

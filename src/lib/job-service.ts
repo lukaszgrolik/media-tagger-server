@@ -71,15 +71,15 @@ export type JobStatus = 'unstarted' | 'in-queue' | 'in-progress' | 'finished';
 export abstract class Job {
     readonly events = new EventEmitter();
 
-    private _id: number;
+    private _id: number = -1;
     get id() { return this._id; }
 
-    private _name: string;
+    private _name: string = '';
     get name() { return this._name; }
     protected set name(val: string) { this._name = val; }
 
     readonly createdAt: string;
-    finishedAt: string;
+    finishedAt: string = '';
     readonly action: JobAction;
     // readonly filePaths: string[];
 

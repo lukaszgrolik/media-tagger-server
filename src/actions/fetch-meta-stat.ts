@@ -3,7 +3,7 @@ import * as fs from 'fs';
 
 import { Config } from '../config-validation';
 import { systemPath } from '../lib/system-path';
-import { JsonDbInstance } from '../types';
+import { DatabaseInstance } from '../types';
 import { updateFiles } from './update-files';
 import * as FileMetadata from '../lib/file-metadata/file-metadata';
 
@@ -16,7 +16,7 @@ export type FilesMetaStatResBody = {
 };
 
 type Opts = {
-    db: JsonDbInstance;
+    db: DatabaseInstance;
     config: Config;
     projectName: string;
     body: FilesMetaStatReqBody;
@@ -52,7 +52,7 @@ export const fetchMetaStat = async (opts: Opts): Promise<FilesMetaStatResBody> =
         i += 1;
 
         await updateMetaStat(filePath);
-        console.log(`progress: ${i}/${filesCount}`)
+        console.log(`progress: ${i}/${filesCount} - ${filePath}`);
     }
 
     console.log('JOB "fetch-meta-stat" finished');

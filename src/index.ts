@@ -1,17 +1,17 @@
 
 import * as path from 'path';
 import * as fs from 'fs';
-import * as express from 'express';
+import express from 'express';
 // import * as yargs from 'yargs';
-import * as cors from 'cors';
+import cors from 'cors';
 // import * as bodyParser from 'body-parser';
 import * as yaml from 'yaml';
 
 import { validateConfig } from './config-validation';
 import { projectFiles } from './api/project-files';
-import { Adapters, JsonDB } from './json-db/json-db';
+import { Adapters, SqliteStore } from './persistence/sqlite-store';
 import { projectTags } from './api/project-tags';
-import { JsonDbData, JsonDbInstance } from './types';
+import { DatabaseSchema, DatabaseInstance } from './types';
 import { JobService } from './lib/job-service';
 import { projectJobs } from './api/project-jobs';
 
@@ -19,11 +19,12 @@ const configStr = fs.readFileSync('./config.yaml', 'utf8')
 const configVal = yaml.parse(configStr);
 const config = validateConfig(configVal);
 
-const dbs = Object.keys(config.projects).reduce((prev: {[projectName: string]: JsonDB<JsonDbData>}, p) => {
-    const db = new JsonDB<JsonDbData>({
+const dbs = Object.keys(config.projects).reduce((prev: {[projectName: string]: SqliteStore<DatabaseSchema>}, p) => {
+    const db = new SqliteStore<DatabaseSchema>({
         adapter: new Adapters.File({
             filePath: config.getDbPath(p),
         }),
+        collections: ['files', 'tags'],
         hooks: {
 
         }
@@ -80,7 +81,7 @@ projectRouter.get('/db', async (req, res) => {
 
     // const dbStr = await fs.promises.readFile(dbPath, {encoding: 'utf-8'});
 
-    const db = res.locals.db as JsonDbInstance;
+    const db = res.locals.db as DatabaseInstance;
     const data = await db.read();
 
     res.json(data);
@@ -88,6 +89,13 @@ projectRouter.get('/db', async (req, res) => {
 
 app.use('/:projectName', async (req, res, next) => {
     // const dbPath = config.getDbPath(req.params.projectName)
+    if (typeof req.params.projectName !== 'string') {
+        res.json({
+            error: 'Project name is required',
+        });
+        return;
+    }
+
     const db = dbs[req.params.projectName];
 
     if (!db) {

@@ -7,7 +7,7 @@ import * as express from 'express';
 
 import { Config } from '../config-validation';
 import * as utils from '../lib/utils';
-import { JsonDbInstance, UniversalResBody } from '../types';
+import { DatabaseInstance, UniversalResBody } from '../types';
 import * as Actions from '../actions/actions';
 import { systemPath } from '../lib/system-path';
 
@@ -35,7 +35,7 @@ export const projectFiles = (app: express.Router, config: Config) => {
     });
 
     app.put<{}, UniversalResBody, Actions.UpdateFilesReqBody>('/files', async (req, res, next) => {
-        const db = res.locals.db as JsonDbInstance;
+        const db = res.locals.db as DatabaseInstance;
 
         try {
             const dbRes = await Actions.updateFiles({db, body: req.body});
@@ -52,7 +52,7 @@ export const projectFiles = (app: express.Router, config: Config) => {
     });
 
     app.put<{}, UniversalResBody, Actions.UpdateFilesTagsReqBody>('/files/tags', async (req, res, next) => {
-        const db = res.locals.db as JsonDbInstance;
+        const db = res.locals.db as DatabaseInstance;
 
         try {
             const dbRes = await Actions.updateFilesTags({db, body: req.body});
@@ -79,7 +79,7 @@ export const projectFiles = (app: express.Router, config: Config) => {
 
     app.post<{}, FilesPostersGenerateResBody, Actions.FilesPostersGenerateReqBody>('/files/posters/generate', async (req, res, next) => {
         const jobService = res.locals.jobService;
-        const db = res.locals.db as JsonDbInstance;
+        const db = res.locals.db as DatabaseInstance;
         const projectName = res.locals.projectName as string;
 
         // @todo validate req.body - filePaths
@@ -114,7 +114,7 @@ export const projectFiles = (app: express.Router, config: Config) => {
 
     app.post<{}, FilesThumbnailsGenerateResBody, Actions.FilesThumbnailsGenerateReqBody>('/files/thumbnails/generate', async (req, res, next) => {
         const jobService = res.locals.jobService;
-        const db = res.locals.db as JsonDbInstance;
+        const db = res.locals.db as DatabaseInstance;
         const projectName = res.locals.projectName as string;
 
         // @todo validate req.body - filePaths, sizes
@@ -144,7 +144,7 @@ export const projectFiles = (app: express.Router, config: Config) => {
     //
 
     app.post<{}, Actions.FilesMetaStatResBody, Actions.FilesMetaStatReqBody>('/files/meta/stat', async (req, res, next) => {
-        const db = res.locals.db as JsonDbInstance;
+        const db = res.locals.db as DatabaseInstance;
         const projectName = res.locals.projectName as string;
 
         try {
@@ -172,7 +172,7 @@ export const projectFiles = (app: express.Router, config: Config) => {
     // };
 
     // app.put<{}, UniversalResBody, PutFilesTagsAddReqBody>('/files/tags/add', async (req, res) => {
-    //     const db = res.locals.db as JsonDbInstance;
+    //     const db = res.locals.db as DatabaseInstance;
 
     //     // @todo validate files exist
     //     // @todo validate all tags from req.body exist
@@ -218,7 +218,7 @@ export const projectFiles = (app: express.Router, config: Config) => {
     // };
 
     // app.put<{}, UniversalResBody, PutFilesTagsRemoveReqBody>('/files/tags/remove', async (req, res) => {
-    //     const db = res.locals.db as JsonDbInstance;
+    //     const db = res.locals.db as DatabaseInstance;
 
     //     // @todo validate files exist
     //     // @todo validate all tags from req.body exist

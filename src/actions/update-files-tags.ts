@@ -1,4 +1,4 @@
-import { DbFileBody, DbTagBody, FileResBody, JsonDbInstance } from "../types";
+import { DbFileBody, DbTagBody, FileResBody, DatabaseInstance } from "../types";
 import { createTags } from "./create-tags";
 
 export type UpdateFilesTagsReqBody = {
@@ -10,7 +10,7 @@ export type UpdateFilesTagsReqBody = {
 };
 
 type Opts = {
-    db: JsonDbInstance;
+    db: DatabaseInstance;
     body: UpdateFilesTagsReqBody;
 };
 
